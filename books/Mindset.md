@@ -1,6 +1,8 @@
 # Mindset
 ###*The New Psychology of Success*
-By Carol Dweck
+By Carol Dweck, Published 2006 by Random House
+
+Date Read: December 2015 - January 2016
 
 [Goodreads](https://www.goodreads.com/book/show/40745.Mindset) | [Amazon](http://smile.amazon.com/dp/0345472322)
 
