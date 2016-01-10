@@ -10,8 +10,6 @@ By Carol Dweck
 
 Print out this [diagram](http://www.doe.k12.de.us/cms/lib09/DE01922744/Centricity/Domain/240/Dweck%20Mind%20set%20poster.pdf) and place somewhere where you will see it every day.
 
-![Mindset Graphic](http://www.doe.k12.de.us/cms/lib09/DE01922744/Centricity/Domain/240/Dweck%20Mind%20set%20poster.pdf)
-
 Also write the following two sentences somewhere where you will see them every day, and ask yourself these questions every morning:
 
 1. What are the opportunities for learning and growth today? For myself? For the people around me?
