@@ -170,3 +170,6 @@ Can store properties, e.g. `(lucy, age, 33)` or relationships, e.g. `(lucy, marr
 **Semantic Web**
 
 A project to represent web sites in a machine-readable format in addition to human-readable. Uses RDF: Resource Description Framework.
+
+## Chapter 3 - Storage and Retrieval
+
