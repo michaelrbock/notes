@@ -316,7 +316,7 @@ With multiple replcas, we need a version number *per-replica* and *per-key*. Eac
 
 ## Chapter 6 - Partitioning
 
-For very large datasets or very high query throughput, replication is not enough: we need to break the data up into *partitions* (kown as *sharding*).
+For very large datasets or very high query throughput, replication is not enough: we need to break the data up into *partitions* (also kown as *sharding*).
 
 Usually, data belongs to exactly one partition. Each partition is a db of its own, though we may support operations that touch multiple partitions at the same time. The reason for partitioning is *scalability*: different shards on different nodes, which scales data size and query throughput. Queries on single partitions can independently execute and complex queries can be done in parallel.
 
