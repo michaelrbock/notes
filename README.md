@@ -1,12 +1,10 @@
 # Notes
-####Notes on books, articles, talks, videos, and more
 
-[![ghit.me](https://ghit.me/badge.svg?repo=michaelrbock/notes)](https://ghit.me/repo/michaelrbock/notes)
+#### Notes on books, articles, talks, videos, and more
 
 ---
 
-### Table of Contents
-
+### Table of Contents (incomplete)
 
 * Books
     * [Mindset](https://github.com/michaelrbock/notes/blob/master/books/Mindset.md)
