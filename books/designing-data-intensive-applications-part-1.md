@@ -6,27 +6,31 @@
 
 ## Chapter 1 - Reliable, Scalable, and Maitainable Data Systems
 
-####*Reliability*: The system should work correctly, even in the case of hardware/software/human error.
+#### *Reliability*: The system should work correctly, even in the case of hardware/software/human error.
 
 * Includes correctness, edge case handling, speed, security.
-* Types of faults (that could lead to *failures*):
+* Types of *faults* (one component breaking, that could lead to *failures*, where the whole system is down):
   * Hardware (usually unrelated, but common).
-  * Software (often cascading, can lie dormant until some unusal circumstance).
+  * Software (often cascading, can lie dormant until some unusual circumstance); Mitigations:
+	  * Careful thinking,
+	  * Testing,
+	  * Process isolation,
+	  * Measuring, monitoring, analyzing production.
   * Human; Mitigations:
-	  * Well-abstracted APIs
-	  * Sandboxes
-	  * Testing (unit, itegration, manual)
-	  * Allow rollbacks
-	  * Monitoring
-	  * Good management and training
+	  * Well-abstracted APIs,
+	  * Sandboxes,
+	  * Testing (unit, itegration, manual),
+	  * Allow fast/easy rollbacks,
+	  * Telemetry (aka monitoring),
+	  * Good management and training (good luck).
 
 #### *Scalability*: As the system grows, there should be reasonable ways to deal with that growth.
 
-* No: "X is scalable", "Y doesn't scale".
-* Yes: "If the system grows in a particular way, wat are our options for coping?".
+* Don't say: "X is scalable", "Y doesn't scale".
+* Yes: "If the system grows in a particular way, what are our options for coping?".
 * *Load parameters*: e.g. requests/second, cache hit rate, read/write ratio, average/peak.
 
-Example: Twitter Timeline, two approaches:
+**Example: Twitter Timeline, two approaches**:
 
 1. On timeline load, get tweets from all users the current user follows, merge them and sort by time.
 1. Maintain a cache for each users' timeline. When someone tweets, insert that into each of their followers' timeline caches.
@@ -34,22 +38,22 @@ Example: Twitter Timeline, two approaches:
 * Two questions to assess performance:
   1. When you increase a load parameter and keep system resources the same, how does that affect performance?
   1. How much would you need to increase resources to keep performance the same if you increased a load parameter?
-* Describing performance: e.g. throughput for a batch system or response times (use percenntiles).
+* Describing performance: e.g. throughput for a batch system or response times (use percenntiles, e.g. *p50, p95, p99*). The *tail latencies* are often from the most valuable users. SLO/SLAs often defined by percentiles.
 * *Head of line bocking*: slow requests block the server from responding to subsequent requests.
-* *Tail latency amplification*: the slowest backend call (even when made in parallel) will determine end user response time.
+* *Tail latency amplification*: the slowest backend call (even when made in parallel) will determine end-user response time.
 * Types of scaling:
-  * Vertical
-  * Horizontal
-  * Shared-nothing: distributing load across multiple machines
-  * Elastic: automatically increases resources under load
+  * *Vertical*
+  * *Horizontal*
+  * *Shared-nothing*: distributing load across multiple machines
+  * *Elastic*: automatically increases resources under load
 
 #### *Maintainability*: People in the future should be able to work on the system *productively*.
 
-* Operability: allow operations to keep system running smootly.
-  * Monitoring, security, configuration changes, maintence, documentation.
-* Simplicity: easy for new engineers to understand the system.
-  * Remove *accidental* complexity. Use good *abstraction*.
-* Evolvability/extensibility/evolvability
+* *Operability*: allow operations to keep system running smootly.
+  * Monitoring, security, configuration changes, maintence, documentation/playbooks, good defaults, self-healing, predictability.
+* *Simplicity*: easy for new engineers to understand the system.
+  * Remove *accidental* (not inherint in the problem the software solves, but only from the implementation) complexity by using good *abstraction*.
+* *Evolvability*/*extensibility*: easy to make changes to system as requirements change. 
 
 ## Chapter 2 - Data Models and Query Languages
 
