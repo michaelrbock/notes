@@ -61,10 +61,10 @@
 
 Reasons for NoSQL adoption:
 
-* Need for greater scalability (very large datasets or high write throughput)
-* F/OSS > commercial
-* Specialized query operations
-* More dynamic/expressive data model
+* Need for greater scalability (very large datasets or high write throughput).
+* F/OSS > commercial.
+* Specialized query operations.
+* More dynamic/expressive data model.
 
 *Impedence mismatch*: disconnect between relational data model and OO application code.
 
@@ -89,37 +89,42 @@ Choice between storing IDs (e.g. `region_id` or `industry_id` and plain-text str
 * Don't duplicate human-readable data (just the IDs).
 * IDs can be immutable even if info it identifies changes.
 
-This is called data *normalization* and relies on *many-to-one* relationships.
+This is called data *normalization* and relies on *many-to-one* relationships vs. *duplicating* data.
 
 Cons:
 
 * If the document DB itself does not support joins, must emulate in application code by making multiple queries.
 * Data tends to become more interconnected as features are added, which often have *many-to-many* relationships.
 
-#### Relational vs. Document Databases Today
+#### Relational vs. Document Databases Tradeoffs
 
 * Use a document model if your application data has a document-like strucutre (i.e. a tree of one-to-many relationships, where typically the entire tree is loaded at once).
-    * This avoid *shredding* in relational model which splits a document into multiple tables.
+    * This avoids *shredding* in relational model which splits a document into multiple tables.
     * Avoid *too*-deeply nesting data.
     * Be careful of poor support for joins. 
         * If your application has many-to-many relationships, the document model is less appealing.
         * De-normalizing helps, but application needs to keep denormalized data consistent.
         * Joins can be emuluated in application code, but is usually slower than DB joins.
 
-* Document databases are usually *schema-on-read* (implicit schema, interpreted whhen read), vs. *schema-on-write* in relational DBs.
-* Schema changes in dociument model usually involve `if/else` statements in code vs. `ALTER TABLE` migration in relational model.
+* Document databases are usually *schema-on-read* (aka *schemaless*, implicit schema, interpreted when read), vs. *schema-on-write* in relational DBs.
+	* Analogy to dynamic/runtime vs. compiled  type checking in programming languages.
+* Schema changes in dociument model usually involve `if/else` statements in code vs. `ALTER TABLE`/`UPDATE` migrations in relational model.
 
 **Data Locality**
 
 * Documents are stored continuously and have performance advantage of *storage locality*.
 * Only applies if you need much of the document at the same time: wasteful if you only need a part of it at a time or need to do writes (the whole document needs to be re-written).
 
-### Query Languages
+**Convergence of Document & Relational Models**
+
+* Models are getting more similar over time: e.g. support for JSON in SQL DBs and joins in some document DBs.
+
+### Data Query Languages
 
 #### Declarative Languages
 
-* SQL is a *declarative* language which specifies thhe pattern of data you want (as opposed to a *imperative* programming language where you specify how to achieve goal). 
-* Declarative languages hides implementation details which allows performance improvements in database engine. 
+* SQL is a *declarative* language which specifies thhe pattern of data you want (as opposed to a *imperative* programming language where you specify *how* to achieve goal). 
+* Declarative languages hides implementation details which allows performance improvements in database engine.
 * Declarative languages lead to parallel execution.
 * CSS is similarly declarative.
 
@@ -132,7 +137,7 @@ Cons:
 
 * Useful for data with common many-to-many relationships, e.g.
     * Social graphs, Web pages with links, Road or rail networks.
-* Verticies do not have to be *homogeneous*: you can represent many different types of objects in a single graph.
+* Verticies do *not* have to be *homogeneous*: you can represent many different types of objects in a single graph.
 
 #### Property Graphs
 
@@ -159,7 +164,7 @@ You could store this in two relational tables: verticies and edges.
 
 #### Cypher Query Language
 
-For Neo4j: a declarative language for modeling and querying graph datastore.
+For Neo4j: a *declarative* language for modeling and querying graph datastore.
 
 #### Graph Queries in SQL
 
