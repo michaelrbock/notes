@@ -184,7 +184,7 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 ### Data Structures
 
-* *log* = append-only sequence of records (very fast writes, `O(n)` retrievals.
+* *log* = append-only sequence of records (very fast writes, `O(n)` retrievals).
 
 * *index* = an *additional* structure that stores metadata on the side helping to locate data.
     * Can add and remove indexes without affecting contents of primary data, only affects query performance.
