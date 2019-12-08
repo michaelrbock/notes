@@ -196,130 +196,151 @@ A project to represent web sites in a machine-readable format in addition to hum
 * Simply store a hash map in memory of `{key : byte offset in data file}`, while appending to data file for each write/update.
 * Well-suited for workloads with not too many keys (can keep in memory), but where each key's value is updated frequently (ex: updating number of times a video has been played).
 * Can break log into segment files of a certain size and perform *compaction* on closed segments. Compaction means throwing away duplicate keys in log and keeping only the most recent update for each key.
-    * Can also merge across segments (since segments are never modified). Merging and compaction can happen in background threads while serving reads and writes as normal.
-    * Each segment has it's own hash map with hfile offsets.
+    * Can also merge across segments (since segments are never modified). Merging and compaction can happen in background threads while serving reads and writes as normal until finished.
+    * Each segment has it's own hash map with file offsets.
 * Additional details:
-    * Binary format for segment files.
-    * Deleting records requires a special deletion record (a *tombstone*).
-    * Crash recovery requires re-creating in-memory hash maps (can snapshot them to disk).
+    * Binary format for segment files, not CSV.
+    * Deleting records requires a special deletion record (a *tombstone*): can discard previous values when merging.
+    * Crash recovery requires re-creating in-memory hash map (can snapshot them to disk).
     * Partially-written records (mitigate with checksums in case of crash mid-way thru write).
     * Only one thread for writes, multiple for reads.
-* Limitations
+
+* Limitations:
     * Hash table must fit in memory.
     * Range queries are not efficient.
 
 #### SSTables and LSM Trees
 
-* *SortedStringTable* = segemnt file of key-value pairs sorted by key.
+* *SortedStringTable* = segement files of key-value pairs *sorted* by key.
     * Merging segments is efficient, similar to merge sort.
-    * Only need to keep a (sparse) index to some keys to find any key in file, can scan between offsets for the rest.
+    * Only need to keep a (sparse) index to some keys to find any key in file, can scan between offsets for the rest (similar to binary search).
     * Can compress blocks before writing to disk and point index to start of block.
-* Constructing SSTables
+* Constructing SSTables:
     * Writes go to an in-memory balanced tree (red-black or AVL), called a *memtable*.
-    * When the memtable gets bigger than some threshold, write it to disk as an SSTable file (easy because the tree is sorted by key). While this is writing, writes go to a new memtable.
+    * When the memtable gets bigger than some threshold, write it to disk as an SSTable file (easy because the tree is sorted by key). While this is writing to disk, writes go to a new memtable.
     * To serve a read request: first try to find in memtable, then in most-to-least recent segments.
     * Run merging/compaction periodically in background.
     * Also write to a log file in case of crash to restore memtable.
 
-* Full text search is acheived by having a mapping of keys (search *term*s) to values (list of IDs of all documents containing that key/term the *postings list*).
+* [LevelDB](https://github.com/google/leveldb) (Google) and [RocksDB](https://rocksdb.org/) (Facebook) are key-value stores that use the algorithm above.
+* Cassandra and HBase are inspired by Google's BigTable, where *SSTable* and *memtable* were introduced.
+* Full text search is acheived by having a mapping of keys (search *terms*) to values (list of IDs of all documents containing that key/term: the *postings list*).
+	* Lucene, an indexing engine for full-text search used by Elasticsearch and Solr uses this method for storing its *term dictionary*.
 
-* *Bloom filters* are used to optimize reads where the key does not exist (to avoid searching back through all previous segments).
+* *Bloom filters* are used to optimize reads where the key does not exist (to avoid searching back through all previous segments via disk reads).
 * Compaction/merging strategies:
     * *Size-tiered*: newer and smaller SSTables are merged into older and larger ones.
     * *Leveled*: key range is split up into smaller SSTables and older data is moved into separate "levels", which allows compaction to proceed more incrementally and use less disk space.
 
-* LSM allows for fast range queries and high write throughput.
+* LSM-trees allow for fast range queries *and* high write throughput.
 
 #### B-Trees
 
-* Most common indexing strategy (in relational DBs and others).
-    * Break down database into fixed-size *blocks* or *pages* (traditionally 4KB in size).
-    * Each page can can indentified using an address and one page can refer to another (like a pointer).
+* Most common/standard indexing strategy (in relational DBs and others).
+    * Break down database into fixed-size *blocks* or *pages* (traditionally 4KB in size). Keeps key-value pairs sorted by key.
+    * Each page can can indentified using an address and one page can refer to another (like a pointer, but on disk).
         * Can use these page references to construct a tree of pages.
     * One page is the root. The page contains several keys and references to child pages. Each child is responsible for a contiguous range of keys (and keys surrounding the references indicate where the boundaries for those ranges lie).
-    * See diagrams on pg. 80-81.
+    * See diagrams on pg. 80-81: Figures 3-6 and 3-7.
     * When looking up a key, follow references until you get to a *leaf page* (containing only keys inline or refernces to values for keys).
-    * The *branching factor* is the number of references to child pages per page.
+    * The *branching factor* is the number of references to child pages per page (typically several hundred).
     * To update a key: search for the leaf page containing that key and re-write the page.
     * To add a key: search for page whose range encompasses that key and add it. If there's not enough free space, split it into two half-full pages and the parent is updated.
-    * A B-Tree with `n` keys always has a depth of `O(log n)`. A four-level tree of 4 KB pages with a branching factor of 500 can store up to 256 TB.
+    * A *balanced* B-Tree with `n` keys always has a depth of `O(log n)`. A four-level tree of 4 KB pages with a branching factor of 500 can store up to 256 TB.
 
-#### Making B-Trees Reliable
+**Making B-Trees Reliable**
 
-* Writes happen via overwritting a page.
+* Writes happen via *overwritting*/*modifying* a page (not just appending like in LSM-trees).
 * Some operations require overwrites to multiple pages.
     * This is dangerous because what if crash happens after only some pages have been written?
         * In order to be resilient to crashes, include a *write-ahead-log* (WAL or *redo log*). An append-only file where every modification must be written before it can be applied to the pages of the tree itself.
         * If coming back from a crash, can restore B-Tree to consistent state.
-* *Latches* (lightweight locks) protect tree structures from concurrency issues.
+* *Latches* (lightweight locks) protect B-tree from concurrency 
 
-#### B-Tree Optimizations
+**B-Tree Optimizations**
 
 * Instead of WAL, use a copy-on-write scheme: modified page is written to a new location and parent reference is updated to point to the new page.
 * Save space by storing abbreviated key.
 * Try to keep leaf pages in sequential order on disk.
 * Add additional pointers to tree (e.g. left/right pointers from leaf pages to siblings).
+* *Fractal trees* borrow log-structured ideas to reduce disk seeks.
 
 ### Comparing B-Trees and LSM-Trees
 
-* LSM-trees are typically faster for writes and B-trees are faster for reads. Reads are slower on LSM-trees because they have to check several different data structs and SSTables at different stages of compaction.
+* LSM-trees are typically faster for writes, whereas B-trees are faster for reads. Reads are slower on LSM-trees because they have to check several different data structs and SSTables at different stages of compaction.
 * Performance needs to be tested on specific workload.
 
 #### Advantages of LSM-Trees
 
-* Lower *write amplification* (how many times data needs to be written to disk per write to the database).
-    * Matters in write-heavy applications.
+* Lower *write amplification* (how many times data needs to be written to disk per write to the database over the database's lifetime).
+    * Matters for performance in write-heavy applications.
     * Also important because sequential writes of an LSM-tree are much faster on magnetic disk than random writes.
 * Compress better and produce smaller files on disk than B-trees (which have fragmentation).
 
 #### Downsides of LSM-Trees
 
 * Sometimes the compaction process will get in the way of concurrent access. A request may need to wait while the disk finishes an expensive compaction (affects higher percentiles).
-    * B-trees are more predictable.
-* Disk's finite write bandwidth must be shared between initial write (memtable to disk) and background compaction operations.
+    * B-trees can be more predictable.
+* Disk's finite write bandwidth must be shared between initial write (memtable to disk) and background compaction operations.	
 * Must watch out for high write throughput and misconfigured compaction where disk keeps growing and slows down reads and/or runs out of disk.
 
 ### Secondary Indexes
 
+* Made by `CREATE INDEX` and crucial for performing joins efficiently.
 * There may be many rows under the same index entry.
-    * Can be solved by making each value in the index a list of matching row IDs or by making each entry unique by adding a row ID.
+    * Can be solved by making each value in the index a list of matching row IDs or by making each entry unique by appending a row ID to it.
+
+**Storing values within the index**
 
 * Some indexes have values that include the row data itself while some store just a reference to the row elsewhere.
-    * When storing reference, the row is stored in a *heap file*.
+    * When storing references, the row itself is stored in a *heap file*.
 * Storing the data directly in the index is known as a *clustered index*.
-    * A *covering index* or *index with included columns* stores just some of the table's columns.
+    * A *covering index* or *index with included columns* stores just *some* of the table's columns within the index.
     * Duplicating data requires additional storage and write overhead.
 
 #### Multi-column indexes
 
 * *Concatenated index* combines several fields into one key by just appending the columns together.
-* *Multi-dimensional indexes* allow you to make range queries across multiple columns at once.
-    * Example: query for restaurants within 2 lattitudes and 2 longitudes.
-    * Example: query for all dates with tempratures between 25 and 30 degrees in 2013.
+* *Multi-dimensional indexes* allow you to make range queries across multiple columns at once. E.g. *R-trees*.
+    * Example: query for restaurants within rectangular area, i.e. 2 lattitudes and 2 longitudes.
+    * Example: query for all dates with tempratures between 25 and 30 degrees in 2013 with 2D index on *(date, temprature)*.
 
 **Full Text Search and Fuzzy Indexes**
 
-* Can have a LSM-tree with tries to do fuzzy full text search.
+* Lucerne can have a LSM-tree with in-memory finite state automaton, like a trie, to do fuzzy full text search.
 
-#### Keeping everything in memory
+#### Keeping everything in memory (*in-memory databases*)
 
 * Stores everything in RAM for data that can fit.
     * Can also have a log of changes to disk for durability.
+    * Performance advantage of avoiding encoding data structures to write to disk.
+    * Allows implementations of interesting data structures like priority queues and sets (e.g. in Redis).
 
 ### Transaction Processing or Analytics?
 
 * OLTP = *online transaction processing*
-    * End-user initiated, reading a small number of records per query, fetching by key.
+    * End-user initiated.
+    * Reading a small number of records per query, fetching by key.
     * Random-access, low-latency writes.
     * Acessing latest state of data.
 * OLAP = *online analytic processing*
     * Business analytics for business intelligence.
     * Aggregate over large number of records.
-    * Read over bulk import or event stream. Looking at history of data.
-    * Can use normal SQL or separate *data warehouse*.
+    * Write via bulk import (ETL) or event stream. Looking at history of data.
+    * Can use same database or a separate *data warehouse*.
 
 * Data is *Extract-Transform-Load (ETL)* from OLTP systems in data warehouse (read-only copy).
-    * Indexes in OLTP usually not be helpful for analytic queries.
+    * Indexes in OLTP will usually not be helpful for analytic queries.
+
+#### Data Warehouse
+
+* OLTP systems need to be highly-available and therefore want to avoid running ad hoc analytic queries on an OLTP database that may harm performance.
+* Instead, *ETL* data from OLTP databases (either via periodic dump or continuous stream of updates) into *data warehouse*.
+* Data warehouse can be optimized for analytic access patterns.
+
+**Divergence between OLTP databases and data warehouses**
+
+* Although both are accessed through a common SQL query interface, the internals can look quite different because they are optimized for different query patterns.
 
 #### Schemas for Analytics
 
@@ -336,19 +357,21 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 * With trillions of rows and PBs of data in fact table, gets challenging to query efficiently.
     * For analytics, only query a subset of columns even if you have 100+ column-wide tables.
-* *Column-oriented storage* stores all values from each *column* together.
+* *Column-oriented storage* stores all values from each *column* together (as opposed to *row-oriented* as in most OLTP databases).
     * Allows us to only load data from columns we are interested in.
+    * Relies on each column file containing the row's data in the same order.
 
 #### Column Compression
 
 * When sequences of values in column are repetitive, they are a good candidate for compression.
-    * E.g. *bitmap encoding*.
+    * E.g. *bitmap encoding*:
         * Encodes columns where there are only `n` distinct values with `n` bitmaps, one for each distinct value and one bit for each row.
         * The bit maps can then be run length encoded.
 * Also allows for faster processing via taking advantage of CPU cyles and L1 cache.
 
 #### Sort Order in Column Storage
 
+* Don't *need* a sort order: can just keep in order each row is inserted.
 * Columns must all be sorted together so the `k`th item from column belongs to the same row as the `k`th item from another column. So data must be sorted an entire row at a time.
     * Developer can choose which column to sort by (first, second, etc.). Which also allows for compression.
     * Example: sort by date, then product.
@@ -356,16 +379,17 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 #### Writing to Column-Oriented Storage
 
-* Column optimizations for reads make writes more difficult.
-* LSM-trees > B-trees for this.
+* Column optimizations for reads make writes more difficult:
+	* Can't update-in-place with compressed columns without rewriting all the column files.
+* LSM-trees > B-trees for this with in-memory store then written to disk.
 
 #### Aggregation: Data Cubes and Materialized Views
 
 * *Materialized aggregates*: cache some common aggregations of data (e.g. `COUNT`, `SUM`, `AVG`, `MIN`, etc.).
     * Can use a *materialized view*: the result of some query that's actually cached to disk.
     * When data updates, a materialized view needs to update because it is a denormalized copy of data.
-        * Make writes more expensive, which is why they're more common in data warehouses than OLTP.
-    * *Data cube* or *OLAP cube*: store aggregate (e.g. `SUM`) of an attribute of all facts with some combiation of dimensions. See figure on pg. 102.
+        * Make writes more expensive, which is why they're more common in data warehouses than OLTP databases.
+    * *Data cube* or *OLAP cube*: store aggregate (e.g. `SUM`) of an attribute of all facts with some combiation of dimensions. See Figure 3-12 on pg. 102.
 
 
 ## Chapter 4 - Encoding and Evolution
