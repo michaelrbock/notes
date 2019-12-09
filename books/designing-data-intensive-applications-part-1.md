@@ -398,8 +398,8 @@ Because of staged server rollouts and installed client apps, software needs to h
 
 ### Formats for Encoding Data
 
-* The way data is represented in a program (as data structures) is different from when it is sent over the wire or written to a file.
-* Transforming data from in-memory to byte sequence is *encoding/serialization* and the reverse is *decoding/deserialization*.
+* The way data is represented in a program (as in-memory data structures) is different from when it is sent over the wire or written to a file.
+* Transforming data from in-memory to a byte sequence is *encoding/serialization* and the reverse is *decoding/deserialization*.
 
 #### JSON, XML, and Binary Variants
 
@@ -416,10 +416,13 @@ Downsides of textual formats:
 * Require a pre-defined schema.
 * Each field has a type annotation, a field tag (name alias), and length information in addition to the data itself.
 
-Errata: `required` fields are considered harmful and were removed in proto3.
+Personal note: `required` fields are considered harmful and were removed in proto3.
 
-* *Schema evolution* is handled by field tags: old code can ignore new fields, and new code can always read old data as long as field tags are not changed.
+* *Schema evolution* is handled by field tags: old code can ignore new fields, and new code can always read old data as long as field tags are not changed. Never re-use a tag number.
 * It's OK to change ints from 32->64 bits and `optional` to `required` fields.
+* Thrift has lists, Proto just has `repeated` fields. OK to change `optional` to `repeated`.
+
+Personal note: `message`s can be nested.
 
 #### Avro
 
@@ -427,7 +430,7 @@ Errata: `required` fields are considered harmful and were removed in proto3.
 * There are no field tags, so encoded data *must* be read with the matching schema.
 * Instead, there is a *writer's* (built into app when encoding) and *reader's schema* (built into the app that's decoding data).
     * When reading data, Avro looks at the writer's and reader's schemas side-by-side and resolves differences. E.g. it's OK if fields are in different orders (they are matched by field names) or if there are missing/extra fields.
-* To maintain compatibility, can only add/remove field with default values (must explicitly set fields as nullable).
+* To maintain compatibility, can only add or remove a field with a default value (must explicitly set fields as nullable).
 * Three ways to include the writer's schema:
     * Large file with lots of records: include schema once at top of file.
     * Database with individually-written rows: include version number per-row and store version:schema in a table.
@@ -478,7 +481,7 @@ Used for:
 
 #### Problems with RPCs
 
-* RPC tries to make making a network request the same as making a local function call, but there are fundamental differences:
+* RPC *tries* to make making a network request the same as making a local function call, but there are fundamental differences:
     * Network requests are unpredictable (can fail) and you must anticipate and, e.g., retry.
     * A request could simply not return (e.g. timeout) and you may not know what happened.
     * If you retry, you may actually cause unintended consequences unless you build *idempotence*.
@@ -510,7 +513,7 @@ Used for:
     * No need to know IP/port of recipeint.
     * One message can be sent to many recipients.
     * Logically decouples sender/recipient.
-* Message passing can only go one-way.
+* Message passing can only go one-way though.
 
 **Message Brokers**
 
