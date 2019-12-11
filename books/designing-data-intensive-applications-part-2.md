@@ -14,14 +14,15 @@
 
 **Vertical scaling**
 
-* *Shared-memory architecture*: increase CPU, RAM, Disk and treat as single machine.
-* *Shared-disk architecture*: several machines with shared disk; limited by locking overhead.
+* *Shared-memory architecture*: increase CPU, RAM, disk and treat as single machine.
+* *Shared-disk architecture*: several machines with shared disk (e.g. *NAS*); limited by locking overhead.
 
 #### Shared-Nothing Architectures
 
 * Also called *horizontal scaling*.
 * Each machine is called a *node* and has it's own CPU, RAM, Disk. Coordination happens at software layer.
 * No special hardware required. Can distribute across geographic regions for lower latency and reliability.
+* Downsides: additional complexity and requires caution from application developer.
 
 #### Replication Versus Partitioning
 
@@ -35,9 +36,9 @@ Reasons for *Replication* (keeping a copy of same data on multiple machines):
 
 * To keep data geographically close to users (reduce latency).
 * Increase availability.
-* Scale out number of machines servicing reads.
+* Scale out number of machines serving reads (increase read throughput).
 
-In this chaper, assume dataset is small enough that each machine can hold entire copy. The difficulty in replication lies in handling *changes* to the data over time. Three popular algos for replicating changes between nodes: *single-leader*, *multi-leader*, *leaderless*.
+In this chaper, assume dataset is small enough that each machine can hold an entire copy (no sharding needed). The difficulty in replication lies in handling *changes* to the data over time. Three popular algos for replicating changes between nodes: *single-leader*, *multi-leader*, *leaderless*.
 
 ### Leaders and Followers
 
@@ -49,14 +50,14 @@ In this chaper, assume dataset is small enough that each machine can hold entire
 1. Other replicas are *followers* (aka *slaves*, *read replicas*). When the leader writes new data, it also sends the change to all of its followers as part of *replication log* (aka *change stream*). Each follower takes teh log and applies the updates in the same order.
 1. Reads can be handled from any replica.
 
-#### Synchronous vs. Asynch Replication
+#### Synchronous vs. Async Replication
 
 * The master can choose to wait for the follower to confirm the write before confirming the entire write as successful (*synchronous*).
 * Or, the leader sends the write to a follower, but then doesn't wait for it's response (*asynchronous*).
 * Usually replication is fast (<1 sec), but sometimes (if a follower is recovering from a failure, the system is near capacity, or there are network problems) then replication could be delayed.
 * The advantage of synchronous is that the follower has the most up-to-date copy of the data, but the problen is that if the synchronous follower doesn't respond, the write cannot be processed and leader must block until synchronous replica is available.
-    * Therefore, not all followers can be synchronous. In practice, it usually means that *one* follower is synchronous and the rest are asynch (called *semi-synchronous*).
-* Often, leader-based replication is asynch, so if the leader fails unrecoverably, any unreplicated writes are lost, but the leader can process writes even if followers are behind.
+    * Therefore, not all followers can be synchronous. In practice, this usually means that just *one* follower is synchronous and the rest are async (called *semi-synchronous*).
+* Often, leader-based replication is completely async, so if the leader fails unrecoverably, any unreplicated writes are lost, but the leader can process writes even if followers are behind.
     * Even with weakened durability, this scheme is widely used.
 
 #### Setting Up New Followers
@@ -66,7 +67,7 @@ Setting up a follower without downtime while the system is in flux:
 1. Take a consistent snapshot of the leader's db at a point in time (without locking entire db).
 1. Copy snapshot to new follower node.
 1. Follower connects to leader and requests all changes since snapshot (therefore snapshot has to be associated with a position in the replication log).
-1. When the follower has processed the backlog, it is *caught up* and can now continue to process changes.
+1. When the follower has processed the backlog, it is *caught up* and can now continue to process live changes.
 
 #### Handling Node Outages
 
@@ -81,8 +82,8 @@ Any node can go down (planned or unplanned) without bringing down the whole syst
 
 In *failover*, one of the followers needs to be promoted to be the new leader, clients needs to be reconfigured to send their writes to the new leader, and other followers need to start consuming data changes from the new leader. Steps:
 
-1. *Determine the leader has failed*: usually becuase it is timing out.
-1. *Choose a new leader*: election process or appointed via a *controller node*. This is a consensus problem.
+1. *Determine the leader has failed*: usually by checking if it has timed out.
+1. *Choose a new leader*: election process or appointed via a *controller node*. Try to choose most-up-to-date. This is a consensus problem.
 1. *Reconfigure the system to use the new leader*: Clients need to send write requests to new leader. The old leader (if it returns) must be forced to become a follower.
 
 Things that can go wrong in failover:
@@ -96,19 +97,19 @@ Things that can go wrong in failover:
 
 #### Statement-based replication
 
-Simply log each SQL statement in the log and each follower parses and executes the query. Problems:
+Simply log each SQL statement (e.g. `INSERT`, `UPDATE`, `DELETE`) in the log and each follower parses and executes the query. Problems:
 
 * Any nondeterministic function (e.g. `NOW()` or `RAND()`) in the statement.
 * Statements with an autoincrementing counter or depend on some existing data (e.g. `WHERE`) need to be executed in exactly the same order.
 * Statements with side-effects if not deterministic.
 
-Other replications strategies preferred, though still used some if deterministic.
+Other replications strategies are now preferred.
 
 #### Write-ahead log (WAL) shipping
 
 Uses the append-only log containing all sequnces of writes to build exact same data structures as on leader.
 
-Disadvantage is that you cannot use a different version of the db storage engine on leaders/followers, making upgrades harder.
+Disadvantage is that you cannot use a different version of the db storage engine on leaders/followers, making rolling upgrades impossible.
 
 **Logical (row-based) log replication**
 
@@ -128,17 +129,17 @@ Replication at the application layer (instead of db layer) if you want more flex
 
 ### Problems with Replication Lag
 
-*Read-scaling architecture*: create many followers and distribute read requests across them (common in read-heavy web apps). Only asynch replication is feasible (in synch, one broken follower would bring down entire system from handling writes). But, asynch followers may have out-of-date information.
+*Read-scaling architecture*: create many followers and distribute read requests across them (common in read-heavy web apps). Only async replication is feasible (in sync, one broken follower would bring down entire system from handling writes). But, async followers may have out-of-date information.
 
-This inconsistency is a temporary state (if you stopped writing and waited, the followers would catch up) and is called *eventual consistency*. Usually this *replication lag* is small, but with issues it can increase.
+This inconsistency is a temporary state (if you stopped writing and waited, the followers would catch up) and is called *eventual consistency*. Usually this *replication lag* is small, but it can be higher near capacity or with network problems.
 
 #### Reading Your Own Writes
 
-If a user writes data, then immediately reads it (as is common), it would be bad if the asynch follower the read went to didn't have the write yet. We need *read-after write consistency* (aka *read-your-writes consistency*): guarantees that a user will see any updates they submitted (not necessarily other users though). How to implement:
+If a user writes data, then immediately reads it (as is common), it would be bad if the async follower the read request went to didn't yet have the write. We need *read-after write consistency* (aka *read-your-writes consistency*): guarantees that a user will see any updates they submitted (not necessarily other users though). How to implement:
 
 * Read something a user may have modified from the leader.
-* If most things are user-editable, the above doesn't scale. Instead, have other heurisitics for when to read from the leader (e.g. within a certain amount of time, or track replication lag to followers).
-* Client remembers timestamp of most recent write and ensures replica serving read is up-to-date or waits. Timestamp could be a *logical timestamp* (indicating order of writes) or actual system clock.
+* If most things are user-editable, the above doesn't allow for read scaling benefits of replication. Instead, have other heurisitics for when to read from the leader (e.g. within a certain amount of time or track replication lag to followers).
+* Client remembers timestamp of most recent write and ensures replica serving read is up-to-date or waits. Timestamp could be a *logical timestamp* (indicating order of writes) or actual system clock (needs clock synchronization).
 * If spread across multiple DCs, additional complexity.
 
 Additional complication if user accesses service from multiple devices, in which case you need *cross-device* read-after-write consistency:
