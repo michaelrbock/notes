@@ -168,50 +168,53 @@ Ensuring that if a sequence of writes happens in a certain order, anyone reading
 
 ### Multi-Leader Replication
 
-Natural downside to leader-based replication is all writes must go thruough the one leader (or one leader per partition). Natural extension is to have multiple nodes accept writes, each node forwards data changes to all other nodes. Each leader acts as a follower to other leaders. This is called *multi-leader* configuration (aka *master-master* or *active/active* replication).
+* Downside to leader-based replication is all writes must go thruough the one leader (or one leader per partition).
+* If we have multiple nodes accept writes, with each node forwarding data changes to all other nodes, each node acts as a leader and a follower to other nodes. 
+* This is called *multi-leader* configuration (aka *master-master* or *active/active* replication).
 
 #### Use Cases for Multi-Leader Replication
 
-It rarely makes sense to use a multi-leader setup within a single datacenter.
+It rarely makes sense to use a multi-leader setup within a single datacenter: the added complexity does not outweigh benefits.
 
 **Multi-datacenter operation**
 
-Have one leader in *each* datacenter, instead of one overall.
+Have one leader in *each* datacenter, instead of one overall. Each leader replicates its changes to the leaders in other datacenters.
 
-* *Performance*: can improve because writes don't all have to go to one dc. Every write is processed locally in dc and replicated asychronously to other dcs, thus inter-datacenter network delay is hidden from users.
-* *Tolerance of datacenter outages*: each dc can operate independently of others even with a failed dc. Replication catches up when it comes back online.
-* *Tolerance of network problems*: inter-dc traffic goes over public internet. Multi-leader can handle network problems.
+* *Performance*: writes don't all have to go to one datacenter. Every write is processed locally and replicated asychronously to other datacenters, thus inter-datacenter network delay is hidden from users.
+* *Tolerance of datacenter outages*: each datacenter can operate independently of others even with a failed datacenter. Replication catches up when it comes back online.
+* *Tolerance of network problems*: inter-datacenter traffic usually goes over the public internet. Multi-leader can handle network problems.
 
-Problem with multi-leader is handling conflicting writes to two different dcs. There are also many subtle config pitfalls.
+Problem with multi-leader is handling conflicting writes to two different datacenters. There are also many subtle configuration pitfalls and interactions with other db features.
 
 **Clients with offline operation**
 
-E.g. a calendar app across multiple devices. Each device has a local db acting as a leader that can accept writes. Sync (replication) happens asynch when network is available.
+E.g. a calendar app across multiple devices. Each device has a local db acting as a leader that can accept writes. Sync (replication) happens async when network is available.
 
 **Collaborative editing**
 
-*Real-time collaborative editing*, e.g. Google Docs. Changes are instantly applied to user's local replica and asynch replicated to server and other users. By making unit of change small (e.g. single keystroke) you can avoid locking but bring challenges of conflict resolution.
+*Real-time collaborative editing*, e.g. Google Docs. Changes are instantly applied to user's local replica and async replicated to server and other users. By making unit of change small (e.g. single keystroke) you can avoid locking but bring the challenges of conflict resolution.
 
 #### Handling Write Conflicts
 
-Write conflicts can be caused by two leaders concurrently updating the same record.
+* Write conflicts can be caused by two leaders concurrently updating the same record.
+* Each write is applied to local leader and conflict is only detected async when replicated.
 
-**Synch vs. asynch conflict detection**
+**Sync vs. async conflict detection**
 
-If you want synch conflict detection, just use single-leader replication.
+If you want synchronous conflict detection, just use single-leader replication.
 
 **Conflict avoidance**
 
-Application makes sure all writes for a certain record goes through the same leader. From the user's perspective, the system is single-leader. Breaks down if we need to change designated leader for a record, e.g. because of dc failure.
+Application makes sure all writes for a certain record goes through the same leader. From the user's perspective, the system is single-leader. Breaks down if we need to change designated leader for a record, e.g. because of datacenter failure.
 
 **Converging toward a consistent state**
 
-Each replica must arrive at the same final value when all changes have been replicated: conflicts must be resplved in a *convergent* way. Ways to do it:
+Each replica must arrive at the same final value when all changes have been replicated: conflicts must be resolved in a *convergent* way. Ways to do it:
 
-* Give each write a unique ID (e.g. timestamp, UUID, hash of key/value), pick write with highest ID as *winnder*. If a timestamp is used, this is called *last write wins* (LWW) - dangerously prone to data loss.
-* Give each replica a unique ID and highest-ID replica wins. This also implies data loss.
+* Give each write a unique ID (e.g. timestamp, UUID, hash of key/value), pick write with highest ID as the *winner*. If a timestamp is used, this is called *last write wins* (LWW), which is dangerously prone to data loss.
+* Give each replica a unique ID and the highest-ID replica wins. This also implies data loss.
 * Somehow merge the values together.
-* Record the conflict and have application code deal with it at some point later, e.g. by prompting user.
+* Record the conflict and have application code deal with it at some point later, e.g. by prompting the user.
 
 **Custom conflict resolution logic**
 
@@ -220,11 +223,11 @@ Most multi-leader systems allow you to write custom application logic to deal wi
 * *On write*: as soon as the db detects a conflict, it calls the conflict handler.
 * *On read*: all conflicting writes are stored and next time data is read, multiple versions are returned so user/app can resolve.
 
-Conflict resolution usually applies at individual row/document level.
+Conflict resolution usually applies at individual row/document level, not for an entire transaction.
 
 ### Multi-Leader Replication Topologies
 
-*Replication topology* describes the communication paths along which writes are propogated. Tyoes:
+*Replication topology* describes the communication paths along which writes are propogated. Types:
 
 * Most common: *all-to-all*, in which every leader sends its writes to every other leader.
     * Fault tolerance is easier in connected topologies, there is no SPOF.
@@ -251,7 +254,7 @@ After an unavailable node comes back online, how does it catch up on writes it m
 
 If there are *n* replicas, every write must be confirmed by *w* nodes to be considered successful, and we must query at least *r* nodes for each read. And this must hold: *w + r > n*, called *quorum* reads/writes.
 
-These values are usually configurable. A typical set up is to make *n* an odd number and *w = r = (n + 1) / 2 rounded up*. This allows us to tolerate some unavailable nodes (as long as the required *w* and *r* nodes are available).
+These values are usually configurable. A typical set up is to make *n* an odd number (typically 3 or 5) and *w = r = (n + 1) / 2 rounded up*. This allows us to tolerate some unavailable nodes (as long as the required *w* and *r* nodes are available).
 
 #### Limitations of Quorum Consistency
 
@@ -259,7 +262,7 @@ Usually, *r* and *w* are chosen to be a majority of the nodes because that allow
 
 * Sloppy Quorum.
 * If two writes happen concurrently, it is not clear which happened first, must merge writes. If using LWW, writes can be lost due to clock skew.
-* Writes and reads could happen concurrently.
+* Writes and reads could happen concurrently, and it's undetermined whether the read returns the old or new value.
 * If a write succeeds on some nodes but fails on others it is not rolled back on the replicas.
 * If a node carrying a new value fails, and the data is restored for a node carrying an old value.
 * Other timing issues.
@@ -274,8 +277,8 @@ Easy to measure in leader-based replication, but hard to measure in leaderless. 
 
 Dbs with appropriately conffigured quorums can tolerate individual node problems and are good for high availability and low latency that can tolerate stale reads. However, if cut off from many nodes, hard to reach *w* or *r*. Trade-off:
 
-* Better to return an error when we cannot reach quorum?
-* Or should we accept writes anyway and write them to some reachable nodes (aka *sloppy quorum*).
+* Better to return an error when we cannot reach quorum of *w* or *r* nodes?
+* Or should we accept writes anyway and write them to some reachable nodes, but not the *n* nodes on which the value usually lives (aka *sloppy quorum*).
     * Writes and reads still require *w* and *r* successful responses, but those may include nodes that are not among the designated *n* "home" nodes for a value.
     * When the home node returns online, the temporarily written data is sent to the correct node (aka *hinted handoff*).
     * Increases write availability, but can't be sure you have the latest value.
@@ -287,7 +290,7 @@ Users can write values for keys concurrently, and network delays or partial fail
 
 **Last write wins (discarding concurrent writes)**
 
-Attach a timestamp to each write and pick the "most recent" as the winner. LWW achieves convergance at the cost of durability. This may be OK for caching, but not when data loss in unacceptable. Also has timing issues. OK if you treat each key as immutable after written.
+Attach a timestamp to each write and pick the most "recent" as the winner. LWW achieves convergance at the cost of durability. This may be OK for caching, but not when data loss in unacceptable. Also has timing issues. OK if you treat each key as immutable after written.
 
 **The "happens before" relationship and concurrency**
 
@@ -302,7 +305,7 @@ Two operations: A and B.
 Example of two clients both adding items to a shared shopping cart. Each write of the key is assigned a version number which allows the server to know when a concurrent write happens (clients send up theWhelast version number of the key they've seen). Algorithm:
 
 * The server maintains a version number for every key, increments it when the key is written and stores version number and value.
-* When a client reads, the server returns all non-overwritten values and the last version number. A client must read before writting.
+* When a client reads, the server returns all non-overwritten values and the last version number. A client must read (response from write can be a read) before writting.
 * When a client writes a key, it must include the version number from the prior read *and* merge together all values it received from the prior read.
 * When the server receives a writes with a particular version number, it can overwrite all values with that version number or below (since it knows they have been merged), but it must keep all values with a higher version number (bc those writes are concurrent).
 * If you make a write without a version number, simply add that value without overwritting.
