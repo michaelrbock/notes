@@ -387,7 +387,7 @@ Rebalancing must:
 
 #### Strategies for Rebalancing
 
-How not to do it: **hash mod N**. Would have to move all data around when N changes.
+How *not* to do it: **hash mod N**. Would have to move *all* data around when N changes.
 
 **Fixed number of partitions**: create many more partitions than there are nodes (e.g. 1000 partitions for 10 nodes) and when a node is added to the cluster, it can *steal* a few partitions from every existing node until evenly distributed again. Partition sizes are usually fixed and need to choose just the right number.
 
