@@ -51,4 +51,31 @@ Concurrently executing transactions are *isolated* from each other: e.g. each tr
 * In single-node, this means writing to disk and a write-ahead log.
 * In replicated db, this means the data has been sucessfully copied to some number of nodes.
 
-### 
+### Single-Object and Multi-Object Operations
+
+ACID's *Atomicity* and *Isolation* often assume you want to modify several objects at once:  *Multi-object transactions* are needed to keep several pieces of data in sync.
+
+* Multi-object transactions require a way of determining which read an write operations belong to the same transaction.
+* Many nonrelational databases don't have a way of grouping operations, even in *multi-put* operations.
+
+#### Single-object writes
+
+Atomicity and isolation also apply when a single object is being changed, e.g. imagine a fault while writing/updating a 20 KB JSON document.
+
+* Almost all storage engines provide atomicity and isolation on the level of a single object on one node.
+* Atomicity is implemented using a log for crash recovery.
+* Isolation can be implemented using a lock on each object so only one thread can access an object at a time.
+
+#### The needs for multi-object transactions
+
+* Relational DBs with foreign keys (or graph DBs with edges): references need to remain valid when inserting multiple records that refer to each other.
+* Document DBs with denormalized data across objects.
+* Secondary indexes that need to be updated when you change a value.
+
+#### Handling errors and aborts
+
+Unlike ACID, leaderless replication datastores work much more on a "best effort" basis: "the database will do as much as it can, and if it runs into an error, it won't undo something it has already done". It's the application's responsibility to recover from errors.
+
+What could go wrong with retrying an aborted transaction:
+
+* If the transaction actually succeeded, but the network failed...
