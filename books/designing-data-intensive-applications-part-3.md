@@ -120,4 +120,52 @@ A *dirty write* is when an uncommitted value from part of an earlier transaction
 
 #### Snapshot Isolation and Repeatable Read
 
+*Read skew* (*nonrepeatable read*): one transaction reads data from before and after another transaction. Read skew is considered acceptable under read committed isolation.
+
+Situations that cannot tolerate temporary inconsistency:
+
+* Backups.
+* Analytic queries and periodic integrity checks.
+
+*Snapshot isolation* is the solution: each transaction reads from a *consistent snapshot* of the db: the transaction sees all the data that was comitted in the db at the start of the transaction.
+
+**Implementing snapshot isolation**
+
+Write locks prevent dirty writes, like in read committed isolation.
+
+* Principle of snapshot isolation: *readers never block writers, and writers never block readers*.
+    * Allowing db to handle long-running read queries on a consistent snapshot at the same time as processing writes normally.
+
+To implement: the db keeps several different committed versions of an object. This is called *multi-version concurrency control (MVCC)*.
+
+* When a transaction is started, it is given a unique, always-incresing transaction ID.
+* Each row has a `created_by` and (an initially empty) `deleted_by` field.
+* Garbage collection removes rows that no transaction can access any longer.
+
+**Visibility rules for observing a consistent snapshot**
+
+Transaction IDs are used to decide which objects are not visible:
+
+* No writes from any other in-progress transactions.
+* No writes by aborted transactions.
+* No writes made by transactions with a later ID.
+
+Objects are visible if:
+
+* At the time the reader's transaction started, the transaction that created the object had already comitted.
+* The object is not marked for deletion by a comitted transaction.
+
+**Indexes and snapshot isolation**
+
+How do indexes work in multi-version db?
+
+* Have index point to all versions and requery index query to filter out versions that are not visible to current transaction.
+* Use an *append-only/copy-on-write* B-Tree variant.
+
+**Naming confusion**
+
+Unfortunately, snapshot isolation is often called *repeatable read* (or even *serializable*).
+
+#### Preventing Lost Updates
+
 TODO
