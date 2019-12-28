@@ -78,4 +78,46 @@ Unlike ACID, leaderless replication datastores work much more on a "best effort"
 
 What could go wrong with retrying an aborted transaction:
 
-* If the transaction actually succeeded, but the network failed...
+* If the transaction actually succeeded, but the network failed, then retryig causes it to be performed twice without application-level dedupe.
+* If the error is due to overload, retrying will make the problem worse. To avoid this, limit retries or use exponential backoff.
+* It is only worth retrying after transient errors, not permanent errors (e.g. constraint violations).
+* If the transaction has side effects outside the db, must be careful the systems commit or abort together.
+
+### Weak Isolation Levels
+
+Two transactions could lead to concurrency issues (race conditions) only if they touch the same data. Database transaction *isolation* tries to hide concurrency issues from the application.
+
+* *Serializable* isolation means the database guarantees that transactions have the same effect as if they ran *serially*.
+    * Serializeable isolation has a performance cost, and not all databases implement it.
+    * Many systems use weaker (nonserializable) levels of isolation, which protect against *some* concurrency issues, but not all.
+
+#### Read committed
+
+The most basic (and a very popular) level of transaction isolation.
+
+1. No *dirty reads*: when reading, you will only see data that has been committed.
+1. No *dirty writes*: when writing, you will only overwrite data that has been committed.
+
+**No dirty reads**
+
+Prevents:
+
+* Another transaction sees some object updates, but not others. Ex: see unread email, but unread count is not yet updated.
+* A transaction seeing a write that is later rolled back.
+
+**No dirty writes**
+
+A *dirty write* is when an uncommitted value from part of an earlier transaction is overwritten by a write from a later transaction. Read committed must delay the second write until the first write's transaction is committed/aborted.
+
+* Prevents bad outcomes when transactions update multiple objects.
+* Does *not* prevent race condition between two counter increments.
+
+**Implementing read committed**
+
+* Dirty writes are prevented by using locks: a transaction holds a lock from start to commit/abort for each object that is modified.
+    * Only one transaction can hold the lock for any object.
+* Dirty reads are usually prevented not with locks, but instead by returning the old committed value to other transactions that read the object.
+
+#### Snapshot Isolation and Repeatable Read
+
+TODO
