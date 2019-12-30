@@ -205,4 +205,40 @@ Locks and compare-and-set operations assume that there is a single up-to-date co
 * Atomic operations work well in a replicated context if they are commutative (you can apply them in a different order on different replicas). E.g. incrementing a counter or adding to a set.
 * *Last write wins (LWW)* conflict resolution is prone to lost updates.
 
+#### Write Skew and Phantoms
 
+*Write skew* is neither a dirty write nor a lost update because two transactions are updating two different objects, but it's definitely a race condition. Write skew is a generalization of the lost update problem. Write skew can occur if two transactions read the same objects, and then update some of those objects (different transactions may update different objects).
+
+Many of the above tools won't work to prevent write skew. Either need:
+
+* Serializable isolation.
+* Complicated database constraint.
+* Explicitly lock the rows that the transaction depends on.
+
+Examples:
+
+* Doctors taking themselves off on-call, when at least 1 has to always be on call.
+* Meeting room booking system.
+* Multiplayer game.
+* Claiming a username.
+* Preventing double-spending.
+
+**Phantoms causing write skew**
+
+Write skew follows this pattern:
+
+1. A `SELECT` query checks whether some requirement is satisfied.
+1. Application code decides how to continue based on result.
+1. If OK, application makes a write.
+
+But often the check is for the *absence* of rows matching some condition, and the write *adds* a row matching the same condition. When a write in one transaction changes the result of a search query in another transaction, it is called a *phantom*.
+
+**Materializing conflicts**
+
+If the problem of phantoms is that there is no object to which we can attach the locks, you can artificially introduce lock object to the db. E.g. create a row corresponding to a time period (e.g. 15 min) for a room for a meeting room booking system. This is called *materializing conflicts*.
+
+It's hard/error-prone and ugly to let concurrency control mechanism leak into application. Therefore, should prefer to use serializable isolation level if possible.
+
+#### Serializability
+
+TODO
