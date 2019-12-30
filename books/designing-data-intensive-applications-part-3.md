@@ -168,4 +168,41 @@ Unfortunately, snapshot isolation is often called *repeatable read* (or even *se
 
 #### Preventing Lost Updates
 
-TODO
+The *lost update problem* can occur when an app reads some value from the db, modifies it, and writes back the modified value (a *read-modify-write cycle*). 
+
+* If two transactions do this concurrently, one of the modifications can be lost.
+    * Because the second write does not include the first modification.
+    * The later write *clobbers* the earlier write.
+
+Examples:
+
+* Incrementing a counter or updating an account balance.
+* Making a change to a complex value, e.g. JSON document (have to parse document, make change, write back).
+* Two users editing a wiki page.
+
+**Atomic write operations**
+
+Many databases provide atomic update operations, e.g. `UPDATE counters SET value = value + 1 WHERE key = 'foo';`.
+
+Atomic operationsa are implemented by taking an exclusive lock on the object: aka *cursor stability*.
+
+**Explicit locking**
+
+Application explicitly locks objects that are going to be updated. For example if there is logic that cannot be expressed as a db query.
+
+**Automatically detecting lost updates**
+
+Allow read-modify-write cycles to execute in parallel and, if the transaction manager detects a lost update, abort the transaction and force it to retry. DBs can perform this check efficiently in conjunction with snapshot isolation.
+
+**Compare-and-set**
+
+In dbs that don't provide transactions, there is sometimes a compare-and-set operation. It avoids lost updates by allowing an update to happen only if the value has not changed since you last read it. if the value doesn't match, the update has no effect, and the read-modify-write cycle must be retried.
+
+**Conflict resolution and replication**
+
+Locks and compare-and-set operations assume that there is a single up-to-date copy of the data (on one node). This does not apply in multi-leader or leaderless replication dbs. Instead, replicated dbs often allow concurrent writes to create conflicting versions (*siblings*) of a value.
+
+* Atomic operations work well in a replicated context if they are commutative (you can apply them in a different order on different replicas). E.g. incrementing a counter or adding to a set.
+* *Last write wins (LWW)* conflict resolution is prone to lost updates.
+
+
