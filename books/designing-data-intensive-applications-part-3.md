@@ -239,6 +239,64 @@ If the problem of phantoms is that there is no object to which we can attach the
 
 It's hard/error-prone and ugly to let concurrency control mechanism leak into application. Therefore, should prefer to use serializable isolation level if possible.
 
-#### Serializability
+### Serializability
 
-TODO
+Serializable isolation is the strongest isolation level. It guarantees that even though transactions may execute in parallel, the end result is the same as if they had executed one at a time, *serially*, without any concurrency. The db prevents all race conditions.
+
+#### Actual Serial Execution
+
+The simplest way to avoid concurrency problems is to avoid concurrency: only execute one transaction at a time, in serial order, on a single thread.
+
+* RAM is cheaper now.
+* OLTP transactions are usually short and only make a small number of reads & writes. Long-running analytic queries are usually read-only and can be run on a consistent snapshot outside of the serial execution loop.
+
+**Encapsulating transactions in stored procedures**
+
+Systems with single-threaded serial transaction processing don't allow interactive multi-statement transactions. Throughput would be dreadful because the db would spend most of its time waiting for the application to issue the next query for the current transaction.
+
+Instead, the application must submit the entire transaction code as a *stored procedure*. If all the required data is in memory, the stored procedure can execute very fast without waiting for network or disk I/O.
+
+**Summary of serial execution**
+
+* Every transaction must be small and fast.
+* Limited to use cases where active dataset can fit in memory.
+* Write throughput must be low.
+* Cross-partition transactions are hard.
+
+#### Two-Phase Locking (2PL)
+
+Most widely-used algorithm for serializability in databases: *two-phase locking (2PL)*.
+
+Several transactions are allowed to concurrently read the same object as long as nobody is writing to it. But as soon as anyone wants to write (modify or delete) an object, exclusive access is required:
+
+* If transaction A has read an object and transaction B wants to write to that object, B must wait until A commits or aborts before continuing. (B can't change the object behind A's back.)
+* If transaction A has written an object and transaction B wants to read that object, B must wait until A commits or aborts before it can continue.
+    * Reading an old version of the object is not acceptable under 2PL.
+
+Writers block other writers and readers and vice versa.
+
+**Predicate locks**
+
+A *predicate lock* belongs to all objects that match some search condition (e.g. a `WHERE` clause). Applies to even objects which do not yet exist in the database (phantoms).
+
+**Index-range locks**
+
+Predicate locks do not perform well, so most dbs implement *index-range locking* (aka *next-key locking*). They simplify a predicate by matching a greater set of objects, e.g. by attaching to an index.
+
+#### Serializable Snapshot Isolation (SSI)
+
+*Serializable snapshot isolation (SSI)* provides full serializability with only a small performance penalty.
+
+**Pessimistic versus optimistic concurrency control**
+
+Two-phase locking is *pessimistic* concurrency control: if anything might go wrong, it's better to wait until the situation is safe again. By contrast, SSI is *optimistic*: transactions continue instead of blocking, and when about to commit, the db checks if anything bad happened.
+
+**Decisions based on an outdated premise**
+
+Transactions often take action based on a *premise* (a fact that was true earlier in the transaction). But the result of the query many no longer be up-to-date by the time the transaction commits. In order to provide serializable isolation, the db must detect situations where there is a causal dependency between queries and writes in a transaction and abort.
+
+The db must detect when a query result might have changed:
+
+* Reads of a stale MVCC object version (uncommitted write occurred before the read).
+* Writes that affect prior reads (the write occurs after the read).
+
