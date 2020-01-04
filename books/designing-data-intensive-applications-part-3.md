@@ -300,3 +300,83 @@ The db must detect when a query result might have changed:
 * Reads of a stale MVCC object version (uncommitted write occurred before the read).
 * Writes that affect prior reads (the write occurs after the read).
 
+## Chapter 8: The Trouble with Distributed Systems
+
+### Faults and Partial Failures
+
+Software on a single computer (if the hardware is working) is *deterministic*: the same operation always produces the same result.
+
+In a distributed system, some parts of the system can be broken and others working, a *partial failure*. Partial failures are *nondeterministic*.
+
+#### Cloud Computing and Supercomputing
+
+Supercomputers are used for computationally intensive scientific computing tasks and is more similar to a single-node computer: if any part of the system fails, just let everything crash and restart.
+
+By contrast, most internet applications are *online*; they need to serve users with low latency at any time:
+
+* Nodes are built from commodity machines.
+* Network is based on IP and Ethernet.
+* *Something* is likely always broken in a system with thousands of nodes.
+* A system that can tolerate failed nodes is very useful.
+* Geographically distributed.
+
+You can build a realiable system from unreliable components.
+
+### Unreliable Networks
+
+The internet and most internal networks in datacenters are *asynchronous packet networks*. One node can send a message to another node. Many things can go wrong:
+
+* The request may have been lost.
+* Your request may be waiting in a queue.
+* The remote node fails.
+* The remote node has temporarily stopped responding. 
+* The response is lost on the network.
+* The response has been delayed.
+
+If you send a request to another node and don't receive a response, it is *impossible* to tell why. The usual way of handling this issue is a *timeout*. When a timeout occurs, you still don't know whether the remote node got your request or not.
+
+#### Network Faults in Practice
+
+A *network fault* is also known as a *network partition* or *netsplit*.
+
+You need to know how your system responds to network problems: define and test your error handling of network faults.
+
+### Detecting Faults
+
+Many systems need to automatically detect faulty nodes, e.g.:
+
+* A load balancer needs to know to stop sending requests to a dead node.
+* If the leader fails in a single-leader replication database, a follower needs to be promoted to new leader.
+
+Feedback about a remote node being down is useful, but you can't rely on it. To be sure a request was successful, you need a positive response from the application itself. If something has gone wrong, you have to assume you may get no response and need to use a timeout.
+
+#### Timeouts and Unbounded Delays
+
+There is no simple answer to how long a timeout should be. Too long and you have to wait a long time for a node to be declared dead. Too short and you risk declaring a node dead when it is only temporarily slowed down.
+
+Prematurely declaring a node dead is problematic: e.g. could perform an action twice if another node takes over.
+
+When a node is dead, its responsibilities need to be transferred to other nodes. If already overloaded, this could lead to cascading failures.
+
+**Network congestion and queueing**
+
+The variability of packet delays on computer networks is most often due to queueing:
+
+* *Network congestion* leads to queing on a network switch.
+* OS queues incoming request if CPU cores are all busy.
+* Virtual Machine monitor pauses OS while another VM uses a CPU core.
+* TCP performs *flow control*.
+
+When resources are shared (public clouds or multi-tenant datacenters) a *noisy neighbor* may make network delays highly variable.
+
+Choose timeouts experimentally: measure network round-trip times over an extended period. Systems can continuously measure response times and variability (*jitter*) and automatically adjust timeouts.
+
+#### Synchronous Versus Asynchronous Networks
+
+Datacenter networks and the internet use packet switching, not *circuits* (a fixed guaranteed amount of bandwith, the way a telephone network works). The internet is optimized for *bursty* traffic.
+
+The internet shares network bandwidth *dynamically*.
+
+### Unreliable Clocks
+
+
