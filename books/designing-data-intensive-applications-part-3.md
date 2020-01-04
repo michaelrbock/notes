@@ -379,4 +379,165 @@ The internet shares network bandwidth *dynamically*.
 
 ### Unreliable Clocks
 
+Applications depend on clocks and time in various ways, e.g. (1-4: *durations*, 5-8: *points in time*):
 
+1. Has the request timed out?
+1. What's the 99th percentile response time of a service?
+1. What's the QPS?
+1. How long did a user spend on the site?
+1. When was the article published?
+1. When should the reminder email be sent?
+1. When does the cache entry expire?
+1. What is the timestamp on this log entry?
+
+Networks have variable delays which makes it hard to determine the order things happened across multiple machines. Each machine has its own clock hardware device which is not perfectly accurate. Network Time Protocol (NTP) can be used to adjust computer clocks according to a group of servers that get their time from a more accurate source, like GPS.
+
+#### Monotonic Versus Time-of-Day Clocks
+
+**Time-of-day clocks**
+
+A *time-of-day clock* returns the *wall-clock time*: the current time and date according to some calendar, e.g. `clock_gettime(CLOCK_REALTIME)` on Linux which returns the number of seconds since the *epoch* midnight UTC on Jan 1, 1970, not countind leap seconds.
+
+Time-of-day clocks are usually synchronized with NTP. If it gets too far ahead, it may be forcibly reset and appear to jump backwards in time. These jumps and the fact that they ignore leap seconds make time-of-day clocks unsuitable for measuring elapsed time.
+
+**Monotonic clocks**
+
+A *monotonic clock* is suitable for measuring a duration, such as a timeout: `clock_gettime(CLOCK_MONOTONIC)` on Linux, for example. The name comes from the fact that they are guaranteed to always move forward.
+
+You can check the value of the monotonic clock at one point in time, do something, and then check the clock again at a later time. The *difference* tells you how much time elapsed. However, the *absolute* value is meaningless and can't be compared across computers.
+
+NTP adjusts the frequency at which the monotonic clock moves forward: *slewing* the clock if it detects the computer's local quartz is moving faster or slower than the NTP server.
+
+#### Clock Synchronization and Accuracy
+
+Hardware clocks and NTP aren't as reliable or accurate as one might hope:
+
+* The quartz clock in a computer *drifts* (runs faster or slower than it should).
+* When a computer's clock synchronizes with NTP, it may be forcibly reset and time jumps backwards or forwards.
+* NTP has various problems as well.
+
+#### Relying on Synchronized Clocks
+
+If a clock is defective or NTP is misconfigured, the result is most likely to be subtle rather than a dramatic crash. But if the software requires synchronized clocks, you should carefully monitor clock offsets between machines and declare nodes dead whose clock drifts too far.
+
+**Timestamps for ordering events**
+
+Timestamps from time-of-day clocks are a dangerous way to order events. *Last write wins* (LWW) has many problems:
+
+* A node with a lagging clock is unable to overwrite values written by a node with a fast clock.
+* LWW cannot distinguish betweens sequential writes and truly concurrent writes. Version vectors must be used.
+* Two nodes could generate the same timestamp.
+
+*Logical clocks*, based on incrementing counters rather than quartz, are a safer alternative for ordering events than *physical clocks*.
+
+**Clock readings have a confidence interval**
+
+Even if you syncrhonize with an NTP server every minute, drift can be several milliseconds. With an NTP server on the public internet, the best possible accuracy is likely in the tens of milliseconds.
+
+Thus, you can think of a clock reading as a range of times with a confidence interval. Google's Spanner Time API reports time as: `[earliest possible, latest possible]`.
+
+**Synchronized clocks for global snapshots**
+
+Creating monotonically increasing transaction IDs (for implementing snapshot isolation) in a distributed system is a hard problem.
+
+Spanner compares timestamp intervals to determine causality: e.g. if `A = [Aearliest, Alatest] and B = [Bearliest, Blatest]` and `Aearliest < Alatest < Bearliest < Blatest`, then B definitely happened after A.
+
+#### Process Pauses
+
+Example: how does a node know that it's the leader in a single-leader per partition database? It obtains a *lease* from the other nodes (a lock with a timeout - only one node can hold at a time) and must periodically renew the lease. 
+
+Reasons why a thread might be paused (for a long time):
+
+* *Garbage collection* that stops all running threads.
+* VMs can be *suspended* and *resumed*.
+* A CPU spending time on other virtual machines is known as *steal time*.
+* Application performs synchronous disk (or network filesystem) access.
+* An OS may allow *swaping to disk (paging)*: memory access may result in a page fault that requires a page from disk to be loaded into memory. In extreme cases, the OS may spend most of its time swapping pages in and out of memory (*thrashing*).
+
+Running threads are *preempted* and resumed later. On a single machine, we have tools for making things thread-safe. In a distributed system, a node may be paused, but the rest of the world continues moving.
+
+**Response time guarantees**
+
+A *hard real-time* system has a specified *deadline* by which the software must respond. Used for software in dangerous/physical environments, e.g. aircraft, robots, cars.
+
+Providing real-time guarantees requires: a *real-time operating system* (RTOS) that allows processes to be scheduled with a guaranteed allocation of CPU time, library functions must document their worst-case execution times, dynamic memory allocation may be restricted or disallowed.
+
+**Limiting the impact of garbage collection**
+
+One idea is to treat GC pauses like planned outages of a node and let other nodes handle requests from clients while one node is garbage collecting.
+
+### Knowledge, Truth, and Lies
+
+A node in the network cannot *know* anything for sure - it can only make guesses based on the messages it receives/doesn't receive via the network.
+
+In a distributed system, we can state the assumptions we are making about the behavior (the *system model*) and design the actual system to meet those assumptions and provide reliable behavior.
+
+#### The Truth is Defined by the Majority
+
+A node cannot necessarily trust its own "judgement". A distributed system cannot exclusively rely on a single node. Instead, many distributed systems rely on a *quorum*, voting among the nodes: decisions require some minimum number of votes from several nodes to reduce the dependence on any one node.
+
+**The leader and the lock**
+
+Frequently, a system requires there be only one of some thing, e.g.:
+
+* One node is leader of a database partition.
+* Only one transaction can hold the lock for a particular resource.
+* One username per user.
+
+Even if a node believes it is "the chosen one", that doesn't necessarily mean a quorum of nodes agrees. A node may have formerly been the leader, but the other nodes could have declared it dead in the meantime (e.g. due to a network interuption or GC pause)
+
+If a node continues acting as the chosen one, even though its not, it could cause problems.
+
+**Fencing tokens**
+
+A *fencing token* is a number that increases (e.g. by the lock service like ZooKeeper) every time a lock is granted. Requests with a lower fencing token value are rejected.
+
+#### Byzantine Faults
+
+Fencing tokens can detect and block a node that is *inadvertntly* acting in error (e.g. because it hasn't yet found out its lease has expired).
+
+We assume that nodes are unrealiable but honest: when a node responds, it is telling the "truth" to the best of its knowledge.
+
+If there is a risk any nodes may "lie", such behavior is called a *Byzantine fault* and the problem of reaching consensus in this untrusting environment is known as the *Byzantine Generals Problem*.
+
+A system is *Byzantine fault-tolerant* if it continues to operate correctly even if some nodes are malfunctioning, not obeying the protocol, or if malicious attackers are interfering:
+
+* In aerospace environments, data in the computer may become corrupted by radiation.
+* Some participants may attempt to defraud others, e.g. in the Bitcoin network, mutually untrusting parties agree whether a transaction happened without a central authority.
+
+Byzantine fault-tolerant algorithms are complicated, and we assume that all nodes are controlled by the same organization. Web applications need to expect arbitrary/malicious behavior of clients, but don't need Byzantine fault tolerance because the server is the authority.
+
+**Weak forms of lying**
+
+There are pragmatic steps to take towards better reliability without full Byzantine fault tolerance:
+
+* Checksums in application-level protocol.
+* Santize user input. Prevent DDOS. Firewalls. Sanity checks.
+
+#### System Model and Reality
+
+Common system models for timing assumptions:
+
+* *Synchronous model*: assumes *bounded* network delay, process pauses, and clock drift. Not realistic model of most systems.
+* *Partially synchronous model*: behaves like a synchronous system *most of the time*, but sometimes exceeds bounds for network delay, process pauses, and clock drift. Realistic model of many systems.
+* *Asynchronous model*: an algorithm is not allowed to make any timing assumptions and does not even have a clock. Very restrictive.
+
+Common system models for nodes:
+
+* *Crash-stop faults*: a node can fail only in one way: by crashing.
+* *Crash-recovery faults*: nodes may crash and then start responding again after some time. Nodes have stable storage that is preserved across crashes.
+* *Byzantine (arbitrary) faults*: described above.
+
+The most useful models are partially synchronous and crash-recovery.
+
+**Correctness of an algorithm & Safety and liveness**
+
+To define what it means for an algorithm to be *correct*, we can describe its *properties*.
+
+A *liveness* property often includes the word "eventually" in its description, e.g. *availability*. Liveness means *someting good eventually happens*.
+
+A *safety* property means *nothing bad happens*, e.g. *uniquness* or *monotonic sequence*. If a safety property is violated, we can point at a particular point in time at which it was broken. For distributed system algorithms, it must *always* hold.
+
+**Mapping system model to the real world**
+
+Real implementations may have to include code to handle cases that we assumed impossible in theoretical description. But proving an algorithm correct does not mean its *implementation* on a real system will always behave correctly.
