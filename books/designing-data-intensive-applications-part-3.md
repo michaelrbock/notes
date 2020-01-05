@@ -541,3 +541,60 @@ A *safety* property means *nothing bad happens*, e.g. *uniquness* or *monotonic 
 **Mapping system model to the real world**
 
 Real implementations may have to include code to handle cases that we assumed impossible in theoretical description. But proving an algorithm correct does not mean its *implementation* on a real system will always behave correctly.
+
+## Chapter 9: Consistency and Consensus
+
+Like transactions, it is helpful to find general-purpose abstractions with useful guarantees that applications can rely on.
+
+*Consensus*, getting all the nodes to agree on something, is one of the most important abstractions for distributed systems.
+
+### Consistency Guarantees
+
+Beacuse of replication lag (write requests arrive on different nodes at different times), two database nodes may have different data at the same time.
+
+*Eventual consistency*, provided by most replicated databases, means that if you stopped writing, eventually all replicates would *converge* to the same value. This is a weak guarantee: it says nothing about *when* the replicas will converge.
+
+Stronger consistency guarantees are easier to use correctly but may have worse performance or fault tolerance.
+
+### Linearizability
+
+*Linearizability* (aka *atomic consistency*, *strong consistency*, *immediate consistency*, *external consistency*) is the idea is to make a system appear as if there were only one copy of the data, you don't have to worry about replication lag, and all operations on it are atomic.
+
+Linearizability is a *recency guarantee*: as soon as one client successfully completes a write, all clients reading must be able to see the most recent value.
+
+#### What Makes a System Linearizable?
+
+1. If one client's read returns a new value, all subsequent reads must also return the new value, even if the write operation has not yet completed.
+1. Operations always move forward in time. Includes read, write, and compare-and-set operations.
+
+#### Linearizability Versus Serializability
+
+*Serializability* is an isolation property of *transactions* across multiple objects. It guarantees that transactions behave as if they were executed in *some* serial order.
+
+*Linearizability* is a recency guarantee on reads and writes of an individual object and doesn't group operations together into transactions so it does not prevent write skew without taking additional measures such as materializing conflicts.
+
+A db providing both is known as *strict serialzability* or *strong one-copy serializability*. Implementations of serializability based on 2PL or actual serial execution are typically linearizable. SSI is not linearizable by design.
+
+#### Relying on Linearizability
+
+**Locking and leader election**
+
+Single-leader replication systems need to ensure there is only one leader. One way to elect a leader is to use a lock: every node that starts up tries to acquire the lock, and the one that succeeds becomes the leader. The lock must be linearizable so that all nodes agree. ZooKeeper and etcd do this.
+
+**Constraints and uniqueness guarantees**
+
+Uniqueness constraints are common in databases: e.g. a username or email for a user, a file path/name. Similar issues arise with bank account balances, selling items of limited stock, booking seats in an airplane/theater.
+
+A hard uniqueness constraint requires linearizability.
+
+**Cross-channel timing dependencies**
+
+For example if a server stores an image in file storage and adds a message to a queue to tell an image resizer job to fetch the image and resize it, there could be a race condition. If the file storage is linearizable, this issue is avoided.
+
+#### Implementing Linearizable Systems
+
+
+
+### Ordering Guarantees
+
+### Distributed Transactions and Consensus
