@@ -593,8 +593,241 @@ For example if a server stores an image in file storage and adds a message to a 
 
 #### Implementing Linearizable Systems
 
+Replication methods and whether they can be linearizable:
 
+* *Single-leader replication*: *potentially linearizable* as long as you make reads from the leader or synchronously-updated followers and as long as you don't use snapshot isolation.
+* *Consensus algorithms*: *linearizable*, e.g. ZooKeeper or etcd.
+* *Multi-leader replication*: *not linearizable* because they concurrently process writes on multiple nodes and asynchronously replicate them to other nodes.
+* *Leaderless replication*: *probably not linearizable* though sometimes claimed by requiring quorum reads and writes (w + r > n).
+
+**Linearizability and quorums**
+
+There is a race condition that causes nonlinearizable execution, even when using strict quorum in Dynamo-style systems. LWW also is not linearizable.
+
+It *is* possible to make Dynamo-style quorums linearizable at the cost of reduced performance: a reader must perform read repair synchronously.
+
+#### The Cost of Linearizability
+
+A network interruption forces a choice between linearizability and availability.
+
+**The CAP theorem**
+
+Trade off:
+
+* If your application *requires* linearizability and some replicas are disconnected due to a network problem, they become *unavailable*.
+* If your application *does not require* linearizability, then each replica can process requests independently (e.g. multi-leader). The system can remain *available* in the face of a network problem, but is not linearizable.
+
+Network partitions are inevitable, so CAP is really: *either Consistent or Available when Partitioned*.
+
+**Linearizability and network delays**
+
+Linearizability is a useful guarantee, but few systems are in practice, because of *performance*, not fault tolerance. Even RAM in a multi-core CPU is not linearizable(!) because each core has its own memory cache.
 
 ### Ordering Guarantees
 
+The order in which things happen is an important fundamental theme.
+
+#### Ordering and Causality
+
+One reason ordering is important is *causality*, for example:
+
+* There is a *causal dependency* between a question and the answer.
+* In multi-leader replication, some operations depend on others, e.g. a row must be created before being updated.
+* Reading from a consistent snapshot in Snapshot Isolation means *consistent with causality*: seeing the effects of all operations that happened causally before that point.
+* SSI detects causal dependencies between transactions to prevent write skew.
+
+A system that obeys the ordering imposed by causality is *causally consistent*.
+
+**The causal order is not a total order**
+
+*Linearizability*: In a linearizable system, we have a *total order* of operations. With a single copy of the data and atomic operations, we can always say which operations happened first.
+
+*Causality*: Two events are ordered if they are causally related (one happened before the other), but they are incomparable if they are concurrent. Causality defines a *partial order*.
+
+**Linearizability is stronger than causal consistency**
+
+Linearizability *implies* causality but has a performance penalty. It is possible to provide causal consistency that does not slow down due to network delays and remains available in the face of network failures.
+
+**Capturing causal dependencies**
+
+Techniques include version vectors and those seen in SSI.
+
+#### Sequence Number Ordering
+
+We can use *sequence numbers* or *timestamps* (from a *logical clock*) to order events. They provide a *total order* that is *consistent with causality*. You can compare two sequence numbers to determine which operation happened later. This is easy to do in single-leader replication.
+
+**Noncausal sequence number generators**
+
+There are various ways to generate sequence numbers for operations that are *not consistent with causality*.
+
+**Lamport timestamps**
+
+Each node has a unqiue ID and keeps a counter of the number of operations it has processed. The *Lamport timestamp* is a pair of *(counter, node ID)*. This provides a total ordering.
+
+Every node and client keeps track of the *maximum* counter value it has seen so far and includes that on every request.
+
+**Timestamp ordering is not sufficient**
+
+Nodes often have to decide on things *right now*, and Lamport timestamps/total ordering only works after the fact.
+
+#### Total Order Broadcast
+
+A single-leader replication can determine total order by sequencing all operations through a single CPU core on the leader. How to scale this or handle failover is known as *total order broadcast* or *atomic broadcast*.
+
+Single leaders per-partition that only maintain ordering per-partition cannot offer consistency guarantees across partitions.
+
+Total order broadcast is a protocol for exchanging messages between nodes that requires two safety properties:
+
+* *Reliable delivery*: no messages are lost - if a message is delivered to one node, it is delivered to all nodes.
+* *Totally ordered delivery*: messages are delivered to every node in the same order.
+
+**Using total order broadcast**
+
+Consensus services like ZooKeeper implement total order broadcast.
+
+It is also needed for db replication, known as *state machine replication*.
+
+Total order broadcast is a way of creating a *log*; a node cannot insert a message retroactively into an earlier position.
+
+Total order broadcast is useful for implementing a lock service that provides fencing tokens.
+
+**Implementing linearizable storage using total order broadcast**
+
+Total order broadcast is asynchronous: messages are guaranteed to be delivered reliably in a fixed order, but there is no guarantee about *when* a message will be delivered. By contrast, linearizability is a recency guarantee: reads are guaranteed to see the latest value.
+
+You can build linearizable storage on top of total order broadcast though.
+
+**Implementing total order broadcast using linearizable storage**
+
+A linearizable compare-and-set register and total order broadcast are *equivalent* to *consensus*.
+
 ### Distributed Transactions and Consensus
+
+Consensus is *getting several nodes to agree on something*. Situations where it is important:
+
+* *Leader election*
+* *Atomic commit*: ACID transaction atomicity across several nodes - all nodes have to agree on the outcome of the transaction (either all commit or abort).
+
+The FLP result proves that achieving consensus is impossible, but it was proved on a restrictive system model. In practice, with timeouts, achieving consensus is possible.
+
+#### Atomic Commit and Two-Phase Commit (2PC)
+
+**From single-node to distributed atomic commit**
+
+On a single node, atomicity is implemented by the storage engine when it writes the commit record to disk (even if the node crashes, if the commit record was written to disk, the transaction was successful).
+
+What if there are multiple nodes (e.g. multi-object transaction in a partitioned db or term-partitioned secondary index)? It is not sufficient to allow each node to commit independently. If the commit succeeded on some nodes and failed on others, it would violate atomicity.
+
+If some nodes commit the transaction but others abort it, the nodes become inconsistent.
+
+**Introduction to two-phase commit**
+
+2PC is an algorithm for achieving atomic transaction commit across multiple nodes. 2PC uses a *coordinator* (aka *transaction manager*).
+
+A 2PC transaction begins with the application reading/writing on multiple nodes as normal. Each node is a *participant* in the transaction. When the application is ready to commit, the coordinator begins phase 1: sending a *prepare* request to each node:
+
+* If every participant replies "yes", the coordinator sends a *commit* request in phase 2.
+* If any participant replies "no", the coordinator sends an *abort* request to all nodes in phase 2.
+
+**A system of promises**
+
+1. When a participant receives a prepare request it makes sure that it can definitely commit the transaction under all circumstances. By replying "yes", the node promises to commit the transaction without error if requested and surrenders the right to abort, but without actually committing yet.
+1. When the coordinator has received responses to all prepare requests, it makes a definitive decision on whether to commit or abort (committing only if it got all "yes" votes). At this *commit point*, it writes that decision to a transaction log on disk (in case it crashes).
+1. The decision is then sent to all participants and the requests must be retried indefinitely until they succeed. If a participant has crashed, it will commit when it recovers.
+
+There are two "points of no return": when a participant votes "yes" and once the coordinator decides. These ensure the atomicity of 2PC.
+
+**Coordinator failure**
+
+Once a participant has received a prepare request and voted "yes", it must wait to hear back from the coordinator. If the coordinator crashes or the network fails, the participant can do nothing but wait. It's transaction is called *in doubt* or *uncertain*.
+
+#### Distributed Transactions in Practice
+
+Distributed transactions, especially those implemented with 2PC have a heavy performance penalty.
+
+There are two different types of distributed transactions:
+
+* *Database-internal distributed transactions*: all nodes participating are running the same db software.
+* *Heterogenous distributed transactions*: participants are two or more different technologies.
+
+**Exactly-once message processing**
+
+Heterogenous: A message from a message queue can be acknowledged as processed if and only if the db transaction for processing the message was successfully committed.
+
+**XA transactions**
+
+X/Open XA is a standard for implementing 2PC across heterogenous technologies.
+
+**Holding locks while in doubt**
+
+The db cannot release locks until the transaction commits or aborts which means in a 2PC, a transaction must hold onto locks throughout the time it is doubt.
+
+**Recovering from coordinator failure**
+
+In practice, orphaned in-doubt transactions do occur (e.g. a transaction log is lost or corrupted). In that case, an administrator has to manually decide to commit or abort. Or a participant can use a *heuristic* (i.e. *break atomicity*) decision.
+
+**Limitations of distributed transactions**
+
+* If the coordinator runs on one machine, it is a SPOF.
+* XA cannot implement SSI across different systems.
+* In 2PC, *all* participants must respond, so if *any* part of the system is broken, the transaction fails. This *amplifies failures*.
+
+#### Fault-Tolerant Consensus
+
+In the consensus problem: one or more nodes may *propose* values and the consensus algorithm *decides* on one of those values. E.g. several people booking a single seat on a plane/in a theater, or registering a username.
+
+A consensus algorithm must satisfy the following properties:
+
+* *Uniform agreement*: no two nodes decide differently.
+* *Integrity*: no node decides twice.
+* *Validity*: if a node decides the value *v*, then *v* was proposed by some node.
+    * Rules out trivial solutions.
+* *Termination*: every node that does not crash eventually decides some value.
+    * A liveness property. Formalizes fault tolerance: algo must progress even if a node fails.
+    * Subject to fewer than half the nodes are crashed/unreachable.
+
+**Consensus algorithms and total order broadcast**
+
+The most common consensus algorithms are Viewstamped Replication, Paxos, Raft, and Zab. Most of these decide on a *sequence* of values, which makes them *total order broadcast* algorithms. It's equivalent to performing multiple rounds of consensus.
+
+**Epoch numbering and quorums**
+
+The consensus protocols define an *epoch number* (aka *ballot*, *term*, or *view number*) and guarantee within each epoch, the leader is unique.
+
+Every time the current leader is thought to be dead, a vote is started among the nodes to elect a new leader. This election is given an incremented, monotonically increasing epoch number. If there is a conflict, the leader with the higher epoch number prevails.
+
+Before a leader decides anything, it must check there isn't another leader with a higher epoch number. It must collect votes from a *quorum* of nodes. For every decision, it must send the proposal to other nodes and wait for a quorum to respond in favor. A node votes in favor if it is not aware of any other leader with a higher epoch.
+
+Two rounds of voting: once to chose a leader, a second to vote on a leader's proposal. The quorums for these two votes must overlap: if a vote on a proposal succeeds, at least one of the nodes that voted for it must have also participated in the leader election. Thus, the leader knows it is still the leader if no other higher-number epoch is revealed.
+
+**Limitations of consensusa**
+
+* The process by which nodes vote on proposals is a kind of synchronous replication, which has performance implications.
+* Consensus systems require a strict majority of nodes to operate, which is bad in the case of network failures.
+* In the case of highly variable network delays and because of the use of timeouts, frequent leader elections result in poor performance.
+
+#### Membership and Coordination Systems
+
+ZooKeeper is modeled after Google's Chubby lock service. Usually don't use directly, but as part of another project, e.g. HBase, Hadoop, Kafka.
+
+Data is replicated across all nodes using a fault-tolerant total order broadcast algorithm. Also useful:
+
+* *Linearizable atomic operations*: you can implement a lock so that if several nodes try to concurrently perform the same operation, only one will succeed.
+    * A distributed lock is usually implemented as a *lease*, which has an expiry time in case of client failure.
+* *Total ordering of operations*: allows the use of a *fencing token* to prevent client conflicts in the case of process pause.
+* *Failure detection* Client and ZooKeeper servers exchange heartbeats so it knows when a node is dead and can automatically release locks held by that session (*ephemeral nodes*).
+* *Change notifications* Clients can watch for changes of other clients without polling.
+
+**Allocating work to nodes**
+
+ZooKeeper/Chubby model works well if you have several instances of a process/service and need to choose a leader, choose a node for a job scheduler, or decide which partition to assign to which node when reblancing. If done correctly, these types of tasks can be done automatically without human intervention.
+
+ZooKeeper typically runs on a fixed number of nodes (3 or 5) and supports many clients. The kind of data managed by ZooKeeper is slow changing (e.g. "the node running on 10.1.1.23 is the leader for partition 7") which changes on the order of minutes or hours.
+
+**Service discovery**
+
+ZooKeeper is often used for *service discovery*: to find which IP address to reach which service. When a service starts up, it registers itself so it can be found. Unclear if this actually needs consensus, since DNS works fine.
+
+**Membership services**
+
+It is often useful for the system to agree which nodes are considered alive and which are not.
