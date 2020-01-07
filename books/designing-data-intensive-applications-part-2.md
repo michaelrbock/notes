@@ -38,7 +38,7 @@ Reasons for *Replication* (keeping a copy of same data on multiple machines):
 * Increase availability.
 * Scale out number of machines serving reads (increase read throughput).
 
-In this chaper, assume dataset is small enough that each machine can hold an entire copy (no sharding needed). The difficulty in replication lies in handling *changes* to the data over time. Three popular algos for replicating changes between nodes: *single-leader*, *multi-leader*, *leaderless*.
+In this chapter, assume dataset is small enough that each machine can hold an entire copy (no sharding needed). The difficulty in replication lies in handling *changes* to the data over time. Three popular algos for replicating changes between nodes: *single-leader*, *multi-leader*, *leaderless*.
 
 ### Leaders and Followers
 
@@ -47,15 +47,15 @@ In this chaper, assume dataset is small enough that each machine can hold an ent
 * Most common solution is *leader-based replication* (aka *maser-slave*), which works by:
 
 1. One replica is designated the *leader* (aka *master*, *primary*). Writes must be sent to the leader and are written to its local storage.
-1. Other replicas are *followers* (aka *slaves*, *read replicas*). When the leader writes new data, it also sends the change to all of its followers as part of *replication log* (aka *change stream*). Each follower takes teh log and applies the updates in the same order.
+1. Other replicas are *followers* (aka *slaves*, *read replicas*). When the leader writes new data, it also sends the change to all of its followers as part of *replication log* (aka *change stream*). Each follower takes the log and applies the updates in the same order.
 1. Reads can be handled from any replica.
 
 #### Synchronous vs. Async Replication
 
 * The master can choose to wait for the follower to confirm the write before confirming the entire write as successful (*synchronous*).
-* Or, the leader sends the write to a follower, but then doesn't wait for it's response (*asynchronous*).
+* Or, the leader sends the write to a follower, but then doesn't wait for its response (*asynchronous*).
 * Usually replication is fast (<1 sec), but sometimes (if a follower is recovering from a failure, the system is near capacity, or there are network problems) then replication could be delayed.
-* The advantage of synchronous is that the follower has the most up-to-date copy of the data, but the problen is that if the synchronous follower doesn't respond, the write cannot be processed and leader must block until synchronous replica is available.
+* The advantage of synchronous is that the follower has the most up-to-date copy of the data, but the problem is that if the synchronous follower doesn't respond, the write cannot be processed and leader must block until synchronous replica is available.
     * Therefore, not all followers can be synchronous. In practice, this usually means that just *one* follower is synchronous and the rest are async (called *semi-synchronous*).
 * Often, leader-based replication is completely async, so if the leader fails unrecoverably, any unreplicated writes are lost, but the leader can process writes even if followers are behind.
     * Even with weakened durability, this scheme is widely used.
@@ -89,7 +89,7 @@ In *failover*, one of the followers needs to be promoted to be the new leader, c
 Things that can go wrong in failover:
 
 * With async replication, the new leader may not have all of the writes from the old leader before it failed. If the former leader re-joins, what should happen to those writes? The new leader may have received conflicting writes in the meantime. Usually, the old leader's writes are discarded (violating durability).
-* Discarding writes is dangeous if other systems outside db are coordinated.
+* Discarding writes is dangerous if other systems outside db are coordinated.
 * *Split brain*: two nodes both think they are the leader. Could lead to conflicting writes.
 * What is the right timeout before a leader is declared dead?
 
@@ -107,7 +107,7 @@ Other replications strategies are now preferred.
 
 #### Write-ahead log (WAL) shipping
 
-Uses the append-only log containing all sequnces of writes to build exact same data structures as on leader.
+Uses the append-only log containing all sequences of writes to build exact same data structures as on leader.
 
 Disadvantage is that you cannot use a different version of the db storage engine on leaders/followers, making rolling upgrades impossible.
 
@@ -138,7 +138,7 @@ This inconsistency is a temporary state (if you stopped writing and waited, the 
 If a user writes data, then immediately reads it (as is common), it would be bad if the async follower the read request went to didn't yet have the write. We need *read-after write consistency* (aka *read-your-writes consistency*): guarantees that a user will see any updates they submitted (not necessarily other users though). How to implement:
 
 * Read something a user may have modified from the leader.
-* If most things are user-editable, the above doesn't allow for read scaling benefits of replication. Instead, have other heurisitics for when to read from the leader (e.g. within a certain amount of time or track replication lag to followers).
+* If most things are user-editable, the above doesn't allow for read scaling benefits of replication. Instead, have other heuristics for when to read from the leader (e.g. within a certain amount of time or track replication lag to followers).
 * Client remembers timestamp of most recent write and ensures replica serving read is up-to-date or waits. Timestamp could be a *logical timestamp* (indicating order of writes) or actual system clock (needs clock synchronization).
 * If spread across multiple DCs, additional complexity.
 
@@ -149,7 +149,7 @@ Additional complication if user accesses service from multiple devices, in which
 
 #### Monotonic Reads
 
-Avoiding possibility of user seeing data *moving backwards in time*. This could happen if user first reads from a replica with little replication lag, but then reads from a replcia with a lot of replication lag. *Monotonic reads* guarantee this doesn't happen:
+Avoiding possibility of user seeing data *moving backward in time*. This could happen if user first reads from a replica with little replication lag, but then reads from a replica with a lot of replication lag. *Monotonic reads* guarantee this doesn't happen:
 
 * Lesser guarantee than strong consistency, but stronger guarantee than eventual consistency.
 * The user may see older data, but never read older data after previously reading newer data.
@@ -168,7 +168,7 @@ Ensuring that if a sequence of writes happens in a certain order, anyone reading
 
 ### Multi-Leader Replication
 
-* Downside to leader-based replication is all writes must go thruough the one leader (or one leader per partition).
+* Downside to leader-based replication is all writes must go through the one leader (or one leader per partition).
 * If we have multiple nodes accept writes, with each node forwarding data changes to all other nodes, each node acts as a leader and a follower to other nodes. 
 * This is called *multi-leader* configuration (aka *master-master* or *active/active* replication).
 
@@ -180,7 +180,7 @@ It rarely makes sense to use a multi-leader setup within a single datacenter: th
 
 Have one leader in *each* datacenter, instead of one overall. Each leader replicates its changes to the leaders in other datacenters.
 
-* *Performance*: writes don't all have to go to one datacenter. Every write is processed locally and replicated asychronously to other datacenters, thus inter-datacenter network delay is hidden from users.
+* *Performance*: writes don't all have to go to one datacenter. Every write is processed locally and replicated asynchronously to other datacenters, thus inter-datacenter network delay is hidden from users.
 * *Tolerance of datacenter outages*: each datacenter can operate independently of others even with a failed datacenter. Replication catches up when it comes back online.
 * *Tolerance of network problems*: inter-datacenter traffic usually goes over the public internet. Multi-leader can handle network problems.
 
@@ -227,7 +227,7 @@ Conflict resolution usually applies at individual row/document level, not for an
 
 ### Multi-Leader Replication Topologies
 
-*Replication topology* describes the communication paths along which writes are propogated. Types:
+*Replication topology* describes the communication paths along which writes are propagated. Types:
 
 * Most common: *all-to-all*, in which every leader sends its writes to every other leader.
     * Fault tolerance is easier in connected topologies, there is no SPOF.
@@ -275,7 +275,7 @@ Easy to measure in leader-based replication, but hard to measure in leaderless. 
 
 #### Sloppy Quorum and Hinted Handoff
 
-Dbs with appropriately conffigured quorums can tolerate individual node problems and are good for high availability and low latency that can tolerate stale reads. However, if cut off from many nodes, hard to reach *w* or *r*. Trade-off:
+Dbs with appropriately configured quorums can tolerate individual node problems and are good for high availability and low latency that can tolerate stale reads. However, if cut off from many nodes, hard to reach *w* or *r*. Trade-off:
 
 * Better to return an error when we cannot reach quorum of *w* or *r* nodes?
 * Or should we accept writes anyway and write them to some reachable nodes, but not the *n* nodes on which the value usually lives (aka *sloppy quorum*).
@@ -290,7 +290,7 @@ Users can write values for keys concurrently, and network delays or partial fail
 
 **Last write wins (discarding concurrent writes)**
 
-Attach a timestamp to each write and pick the most "recent" as the winner. LWW achieves convergance at the cost of durability. This may be OK for caching, but not when data loss in unacceptable. Also has timing issues. OK if you treat each key as immutable after written.
+Attach a timestamp to each write and pick the most "recent" as the winner. LWW achieves convergence at the cost of durability. This may be OK for caching, but not when data loss in unacceptable. Also has timing issues. OK if you treat each key as immutable after written.
 
 **The "happens before" relationship and concurrency**
 
@@ -305,10 +305,10 @@ Two operations: A and B.
 Example of two clients both adding items to a shared shopping cart. Each write of the key is assigned a version number which allows the server to know when a concurrent write happens (clients send up theWhelast version number of the key they've seen). Algorithm:
 
 * The server maintains a version number for every key, increments it when the key is written and stores version number and value.
-* When a client reads, the server returns all non-overwritten values and the last version number. A client must read (response from write can be a read) before writting.
+* When a client reads, the server returns all non-overwritten values and the last version number. A client must read (response from write can be a read) before writing.
 * When a client writes a key, it must include the version number from the prior read *and* merge together all values it received from the prior read.
 * When the server receives a writes with a particular version number, it can overwrite all values with that version number or below (since it knows they have been merged), but it must keep all values with a higher version number (bc those writes are concurrent).
-* If you make a write without a version number, simply add that value without overwritting.
+* If you make a write without a version number, simply add that value without overwriting.
 
 **Merging concurrently written values**
 
@@ -316,17 +316,17 @@ The client must intelligently merge *sibling* (concurrently-written) values. You
 
 #### Version vectors
 
-With multiple replcas, we need a version number *per-replica* and *per-key*. Each replica will increment its own version number on writes and keep track of which version numbrs it has seen from other replicas. This is called a *version vector*. It allows writes to go to different replicas without data loss.
+With multiple replicas, we need a version number *per-replica* and *per-key*. Each replica will increment its own version number on writes and keep track of which version numbers it has seen from other replicas. This is called a *version vector*. It allows writes to go to different replicas without data loss.
 
 ## Chapter 6 - Partitioning
 
-For very large datasets or very high query throughput, replication is not enough: we need to break the data up into *partitions* (also kown as *sharding*).
+For very large datasets or very high query throughput, replication is not enough: we need to break the data up into *partitions* (also known as *sharding*).
 
 Usually, data belongs to exactly one partition. Each partition is a db of its own, though we may support operations that touch multiple partitions at the same time. The reason for partitioning is *scalability*: different shards on different nodes, which scales data size and query throughput. Queries on single partitions can independently execute and complex queries can be done in parallel.
 
 ### Partitioning and Replication
 
-Partitioning is usually paired with replication (copies of each partition are stored on multiple nodes). Each node can act as a leader for some partitions and a follower for other partiions because a node may store more than one partition.
+Partitioning is usually paired with replication (copies of each partition are stored on multiple nodes). Each node can act as a leader for some partitions and a follower for other partitions because a node may store more than one partition.
 
 ### Partitioning of Key-Value Data
 
@@ -339,7 +339,7 @@ If the partitioning is *skewed*, some partitions have more data than other (all 
 * Partition data by assigning contiguous range of keys to each partition, like an encyclopedia.
 * Each partition is not evenly spaced (A-B vs W-Z, e.g.).
 * Can keep records sorted on each partition for easy range scans.
-* Could lead to skew/hotspots, which can be mitigated by adding additonal info to key.
+* Could lead to skew/hotspots, which can be mitigated by adding additional info to key.
 
 #### Partitioning by Hash of Key
 
@@ -406,8 +406,8 @@ How *not* to do it: **hash mod N**. Would have to move *all* data around when N 
 
 How does a client know which node to connect to? Specific case of more general problem known as *service discovery*. Approaches:
 
-1. Allow clients to connect to any node, if that node can handle request, great, otherwise, it forwards request to appropriate node, recieves the reply, and passes reply back to client.
-1. Send all requests first to a routing tier first which determines which node should handle each request.
+1. Allow clients to connect to any node, if that node can handle request, great, otherwise, it forwards request to appropriate node, receives the reply, and passes reply back to client.
+1. Send all requests first to a routing tier which determines which node should handle each request.
 1. Require clients be aware of partitioning and connect directly to appropriate node.
 
 Hard problem because all participants must agree (consensus in distributed system). Many systems rely on a separate coordination service like ZooKeeper which maintains authoritative mapping:
