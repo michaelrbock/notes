@@ -10,7 +10,7 @@ Many things can go wrong in data systems:
 
 * Db software/hardware could fail at any time (including in the middle of a write).
 * The application could crash (including halfway through a series of operations).
-* Network interuptions.
+* Network interruptions.
 * Multiple clients overwrite each other.
 * Other race conditions.
 
@@ -49,7 +49,7 @@ Concurrently executing transactions are *isolated* from each other: e.g. each tr
 *Durability* is the promise that once a transaction has committed successfully, any data it has written will not be forgotten.
 
 * In single-node, this means writing to disk and a write-ahead log.
-* In replicated db, this means the data has been sucessfully copied to some number of nodes.
+* In replicated db, this means the data has been successfully copied to some number of nodes.
 
 ### Single-Object and Multi-Object Operations
 
@@ -78,7 +78,7 @@ Unlike ACID, leaderless replication datastores work much more on a "best effort"
 
 What could go wrong with retrying an aborted transaction:
 
-* If the transaction actually succeeded, but the network failed, then retryig causes it to be performed twice without application-level dedupe.
+* If the transaction actually succeeded, but the network failed, then retrying causes it to be performed twice without application-level dedupe.
 * If the error is due to overload, retrying will make the problem worse. To avoid this, limit retries or use exponential backoff.
 * It is only worth retrying after transient errors, not permanent errors (e.g. constraint violations).
 * If the transaction has side effects outside the db, must be careful the systems commit or abort together.
@@ -88,7 +88,7 @@ What could go wrong with retrying an aborted transaction:
 Two transactions could lead to concurrency issues (race conditions) only if they touch the same data. Database transaction *isolation* tries to hide concurrency issues from the application.
 
 * *Serializable* isolation means the database guarantees that transactions have the same effect as if they ran *serially*.
-    * Serializeable isolation has a performance cost, and not all databases implement it.
+    * Serializable isolation has a performance cost, and not all databases implement it.
     * Many systems use weaker (nonserializable) levels of isolation, which protect against *some* concurrency issues, but not all.
 
 #### Read committed
@@ -127,7 +127,7 @@ Situations that cannot tolerate temporary inconsistency:
 * Backups.
 * Analytic queries and periodic integrity checks.
 
-*Snapshot isolation* is the solution: each transaction reads from a *consistent snapshot* of the db: the transaction sees all the data that was comitted in the db at the start of the transaction.
+*Snapshot isolation* is the solution: each transaction reads from a *consistent snapshot* of the db: the transaction sees all the data that was committed in the db at the start of the transaction.
 
 **Implementing snapshot isolation**
 
@@ -138,7 +138,7 @@ Write locks prevent dirty writes, like in read committed isolation.
 
 To implement: the db keeps several different committed versions of an object. This is called *multi-version concurrency control (MVCC)*.
 
-* When a transaction is started, it is given a unique, always-incresing transaction ID.
+* When a transaction is started, it is given a unique, always-increasing transaction ID.
 * Each row has a `created_by` and (an initially empty) `deleted_by` field.
 * Garbage collection removes rows that no transaction can access any longer.
 
@@ -152,8 +152,8 @@ Transaction IDs are used to decide which objects are not visible:
 
 Objects are visible if:
 
-* At the time the reader's transaction started, the transaction that created the object had already comitted.
-* The object is not marked for deletion by a comitted transaction.
+* At the time the reader's transaction started, the transaction that created the object had already committed.
+* The object is not marked for deletion by a committed transaction.
 
 **Indexes and snapshot isolation**
 
@@ -184,7 +184,7 @@ Examples:
 
 Many databases provide atomic update operations, e.g. `UPDATE counters SET value = value + 1 WHERE key = 'foo';`.
 
-Atomic operationsa are implemented by taking an exclusive lock on the object: aka *cursor stability*.
+Atomic operations are implemented by taking an exclusive lock on the object: aka *cursor stability*.
 
 **Explicit locking**
 
@@ -320,7 +320,7 @@ By contrast, most internet applications are *online*; they need to serve users w
 * A system that can tolerate failed nodes is very useful.
 * Geographically distributed.
 
-You can build a realiable system from unreliable components.
+You can build a reliable system from unreliable components.
 
 ### Unreliable Networks
 
@@ -362,7 +362,7 @@ When a node is dead, its responsibilities need to be transferred to other nodes.
 
 The variability of packet delays on computer networks is most often due to queueing:
 
-* *Network congestion* leads to queing on a network switch.
+* *Network congestion* leads to queuing on a network switch.
 * OS queues incoming request if CPU cores are all busy.
 * Virtual Machine monitor pauses OS while another VM uses a CPU core.
 * TCP performs *flow control*.
@@ -373,7 +373,7 @@ Choose timeouts experimentally: measure network round-trip times over an extende
 
 #### Synchronous Versus Asynchronous Networks
 
-Datacenter networks and the internet use packet switching, not *circuits* (a fixed guaranteed amount of bandwith, the way a telephone network works). The internet is optimized for *bursty* traffic.
+Datacenter networks and the internet use packet switching, not *circuits* (a fixed guaranteed amount of bandwidth, the way a telephone network works). The internet is optimized for *bursty* traffic.
 
 The internet shares network bandwidth *dynamically*.
 
@@ -396,9 +396,9 @@ Networks have variable delays which makes it hard to determine the order things 
 
 **Time-of-day clocks**
 
-A *time-of-day clock* returns the *wall-clock time*: the current time and date according to some calendar, e.g. `clock_gettime(CLOCK_REALTIME)` on Linux which returns the number of seconds since the *epoch* midnight UTC on Jan 1, 1970, not countind leap seconds.
+A *time-of-day clock* returns the *wall-clock time*: the current time and date according to some calendar, e.g. `clock_gettime(CLOCK_REALTIME)` on Linux which returns the number of seconds since the *epoch* midnight UTC on Jan 1, 1970, not counting leap seconds.
 
-Time-of-day clocks are usually synchronized with NTP. If it gets too far ahead, it may be forcibly reset and appear to jump backwards in time. These jumps and the fact that they ignore leap seconds make time-of-day clocks unsuitable for measuring elapsed time.
+Time-of-day clocks are usually synchronized with NTP. If it gets too far ahead, it may be forcibly reset and appear to jump backward in time. These jumps and the fact that they ignore leap seconds make time-of-day clocks unsuitable for measuring elapsed time.
 
 **Monotonic clocks**
 
@@ -413,7 +413,7 @@ NTP adjusts the frequency at which the monotonic clock moves forward: *slewing* 
 Hardware clocks and NTP aren't as reliable or accurate as one might hope:
 
 * The quartz clock in a computer *drifts* (runs faster or slower than it should).
-* When a computer's clock synchronizes with NTP, it may be forcibly reset and time jumps backwards or forwards.
+* When a computer's clock synchronizes with NTP, it may be forcibly reset and time jumps backward or forwards.
 * NTP has various problems as well.
 
 #### Relying on Synchronized Clocks
@@ -425,14 +425,14 @@ If a clock is defective or NTP is misconfigured, the result is most likely to be
 Timestamps from time-of-day clocks are a dangerous way to order events. *Last write wins* (LWW) has many problems:
 
 * A node with a lagging clock is unable to overwrite values written by a node with a fast clock.
-* LWW cannot distinguish betweens sequential writes and truly concurrent writes. Version vectors must be used.
+* LWW cannot distinguish between sequential writes and truly concurrent writes. Version vectors must be used.
 * Two nodes could generate the same timestamp.
 
 *Logical clocks*, based on incrementing counters rather than quartz, are a safer alternative for ordering events than *physical clocks*.
 
 **Clock readings have a confidence interval**
 
-Even if you syncrhonize with an NTP server every minute, drift can be several milliseconds. With an NTP server on the public internet, the best possible accuracy is likely in the tens of milliseconds.
+Even if you synchronize with an NTP server every minute, drift can be several milliseconds. With an NTP server on the public internet, the best possible accuracy is likely in the tens of milliseconds.
 
 Thus, you can think of a clock reading as a range of times with a confidence interval. Google's Spanner Time API reports time as: `[earliest possible, latest possible]`.
 
@@ -452,7 +452,7 @@ Reasons why a thread might be paused (for a long time):
 * VMs can be *suspended* and *resumed*.
 * A CPU spending time on other virtual machines is known as *steal time*.
 * Application performs synchronous disk (or network filesystem) access.
-* An OS may allow *swaping to disk (paging)*: memory access may result in a page fault that requires a page from disk to be loaded into memory. In extreme cases, the OS may spend most of its time swapping pages in and out of memory (*thrashing*).
+* An OS may allow *swapping to disk (paging)*: memory access may result in a page fault that requires a page from disk to be loaded into memory. In extreme cases, the OS may spend most of its time swapping pages in and out of memory (*thrashing*).
 
 Running threads are *preempted* and resumed later. On a single machine, we have tools for making things thread-safe. In a distributed system, a node may be paused, but the rest of the world continues moving.
 
@@ -474,7 +474,7 @@ In a distributed system, we can state the assumptions we are making about the be
 
 #### The Truth is Defined by the Majority
 
-A node cannot necessarily trust its own "judgement". A distributed system cannot exclusively rely on a single node. Instead, many distributed systems rely on a *quorum*, voting among the nodes: decisions require some minimum number of votes from several nodes to reduce the dependence on any one node.
+A node cannot necessarily trust its own "judgment". A distributed system cannot exclusively rely on a single node. Instead, many distributed systems rely on a *quorum*, voting among the nodes: decisions require some minimum number of votes from several nodes to reduce the dependence on any one node.
 
 **The leader and the lock**
 
@@ -484,7 +484,7 @@ Frequently, a system requires there be only one of some thing, e.g.:
 * Only one transaction can hold the lock for a particular resource.
 * One username per user.
 
-Even if a node believes it is "the chosen one", that doesn't necessarily mean a quorum of nodes agrees. A node may have formerly been the leader, but the other nodes could have declared it dead in the meantime (e.g. due to a network interuption or GC pause)
+Even if a node believes it is "the chosen one", that doesn't necessarily mean a quorum of nodes agrees. A node may have formerly been the leader, but the other nodes could have declared it dead in the meantime (e.g. due to a network interruption or GC pause)
 
 If a node continues acting as the chosen one, even though its not, it could cause problems.
 
@@ -494,9 +494,9 @@ A *fencing token* is a number that increases (e.g. by the lock service like ZooK
 
 #### Byzantine Faults
 
-Fencing tokens can detect and block a node that is *inadvertntly* acting in error (e.g. because it hasn't yet found out its lease has expired).
+Fencing tokens can detect and block a node that is *inadvertently* acting in error (e.g. because it hasn't yet found out its lease has expired).
 
-We assume that nodes are unrealiable but honest: when a node responds, it is telling the "truth" to the best of its knowledge.
+We assume that nodes are unreliable but honest: when a node responds, it is telling the "truth" to the best of its knowledge.
 
 If there is a risk any nodes may "lie", such behavior is called a *Byzantine fault* and the problem of reaching consensus in this untrusting environment is known as the *Byzantine Generals Problem*.
 
@@ -512,7 +512,7 @@ Byzantine fault-tolerant algorithms are complicated, and we assume that all node
 There are pragmatic steps to take towards better reliability without full Byzantine fault tolerance:
 
 * Checksums in application-level protocol.
-* Santize user input. Prevent DDOS. Firewalls. Sanity checks.
+* Sanitize user input. Prevent DDOS. Firewalls. Sanity checks.
 
 #### System Model and Reality
 
@@ -534,9 +534,9 @@ The most useful models are partially synchronous and crash-recovery.
 
 To define what it means for an algorithm to be *correct*, we can describe its *properties*.
 
-A *liveness* property often includes the word "eventually" in its description, e.g. *availability*. Liveness means *someting good eventually happens*.
+A *liveness* property often includes the word "eventually" in its description, e.g. *availability*. Liveness means *something good eventually happens*.
 
-A *safety* property means *nothing bad happens*, e.g. *uniquness* or *monotonic sequence*. If a safety property is violated, we can point at a particular point in time at which it was broken. For distributed system algorithms, it must *always* hold.
+A *safety* property means *nothing bad happens*, e.g. *uniqueness* or *monotonic sequence*. If a safety property is violated, we can point at a particular point in time at which it was broken. For distributed system algorithms, it must *always* hold.
 
 **Mapping system model to the real world**
 
@@ -550,7 +550,7 @@ Like transactions, it is helpful to find general-purpose abstractions with usefu
 
 ### Consistency Guarantees
 
-Beacuse of replication lag (write requests arrive on different nodes at different times), two database nodes may have different data at the same time.
+Because of replication lag (write requests arrive on different nodes at different times), two database nodes may have different data at the same time.
 
 *Eventual consistency*, provided by most replicated databases, means that if you stopped writing, eventually all replicates would *converge* to the same value. This is a weak guarantee: it says nothing about *when* the replicas will converge.
 
@@ -573,7 +573,7 @@ Linearizability is a *recency guarantee*: as soon as one client successfully com
 
 *Linearizability* is a recency guarantee on reads and writes of an individual object and doesn't group operations together into transactions so it does not prevent write skew without taking additional measures such as materializing conflicts.
 
-A db providing both is known as *strict serialzability* or *strong one-copy serializability*. Implementations of serializability based on 2PL or actual serial execution are typically linearizable. SSI is not linearizable by design.
+A db providing both is known as *strict serializability* or *strong one-copy serializability*. Implementations of serializability based on 2PL or actual serial execution are typically linearizable. SSI is not linearizable by design.
 
 #### Relying on Linearizability
 
@@ -662,7 +662,7 @@ There are various ways to generate sequence numbers for operations that are *not
 
 **Lamport timestamps**
 
-Each node has a unqiue ID and keeps a counter of the number of operations it has processed. The *Lamport timestamp* is a pair of *(counter, node ID)*. This provides a total ordering.
+Each node has a unique ID and keeps a counter of the number of operations it has processed. The *Lamport timestamp* is a pair of *(counter, node ID)*. This provides a total ordering.
 
 Every node and client keeps track of the *maximum* counter value it has seen so far and includes that on every request.
 
@@ -739,7 +739,7 @@ There are two "points of no return": when a participant votes "yes" and once the
 
 **Coordinator failure**
 
-Once a participant has received a prepare request and voted "yes", it must wait to hear back from the coordinator. If the coordinator crashes or the network fails, the participant can do nothing but wait. It's transaction is called *in doubt* or *uncertain*.
+Once a participant has received a prepare request and voted "yes", it must wait to hear back from the coordinator. If the coordinator crashes or the network fails, the participant can do nothing but wait. Its transaction is called *in doubt* or *uncertain*.
 
 #### Distributed Transactions in Practice
 
@@ -756,7 +756,7 @@ Heterogenous: A message from a message queue can be acknowledged as processed if
 
 **XA transactions**
 
-X/Open XA is a standard for implementing 2PC across heterogenous technologies.
+X/Open XA is a standard for implementing 2PC across heterogeneous technologies.
 
 **Holding locks while in doubt**
 
@@ -800,7 +800,7 @@ Before a leader decides anything, it must check there isn't another leader with 
 
 Two rounds of voting: once to chose a leader, a second to vote on a leader's proposal. The quorums for these two votes must overlap: if a vote on a proposal succeeds, at least one of the nodes that voted for it must have also participated in the leader election. Thus, the leader knows it is still the leader if no other higher-number epoch is revealed.
 
-**Limitations of consensusa**
+**Limitations of consensus**
 
 * The process by which nodes vote on proposals is a kind of synchronous replication, which has performance implications.
 * Consensus systems require a strict majority of nodes to operate, which is bad in the case of network failures.
@@ -820,7 +820,7 @@ Data is replicated across all nodes using a fault-tolerant total order broadcast
 
 **Allocating work to nodes**
 
-ZooKeeper/Chubby model works well if you have several instances of a process/service and need to choose a leader, choose a node for a job scheduler, or decide which partition to assign to which node when reblancing. If done correctly, these types of tasks can be done automatically without human intervention.
+ZooKeeper/Chubby model works well if you have several instances of a process/service and need to choose a leader, choose a node for a job scheduler, or decide which partition to assign to which node when rebalancing. If done correctly, these types of tasks can be done automatically without human intervention.
 
 ZooKeeper typically runs on a fixed number of nodes (3 or 5) and supports many clients. The kind of data managed by ZooKeeper is slow changing (e.g. "the node running on 10.1.1.23 is the leader for partition 7") which changes on the order of minutes or hours.
 
