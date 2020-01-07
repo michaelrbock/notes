@@ -12,17 +12,17 @@
 * Types of *faults* (one component breaking, that could lead to *failures*, where the whole system is down):
   * Hardware (usually unrelated, but common).
   * Software (often cascading, can lie dormant until some unusual circumstance); Mitigations:
-	  * Careful thinking,
-	  * Testing,
-	  * Process isolation,
-	  * Measuring, monitoring, analyzing production.
+      * Careful thinking,
+      * Testing,
+      * Process isolation,
+      * Measuring, monitoring, analyzing production.
   * Human; Mitigations:
-	  * Well-abstracted APIs,
-	  * Sandboxes,
-	  * Testing (unit, itegration, manual),
-	  * Allow fast/easy rollbacks,
-	  * Telemetry (aka monitoring),
-	  * Good management and training (good luck).
+      * Well-abstracted APIs,
+      * Sandboxes,
+      * Testing (unit, integration, manual),
+      * Allow fast/easy rollbacks,
+      * Telemetry (aka monitoring),
+      * Good management and training (good luck).
 
 #### *Scalability*: As the system grows, there should be reasonable ways to deal with that growth.
 
@@ -38,7 +38,7 @@
 * Two questions to assess performance:
   1. When you increase a load parameter and keep system resources the same, how does that affect performance?
   1. How much would you need to increase resources to keep performance the same if you increased a load parameter?
-* Describing performance: e.g. throughput for a batch system or response times (use percenntiles, e.g. *p50, p95, p99*). The *tail latencies* are often from the most valuable users. SLO/SLAs often defined by percentiles.
+* Describing performance: e.g. throughput for a batch system or response times (use percentiles, e.g. *p50, p95, p99*). The *tail latencies* are often from the most valuable users. SLO/SLAs often defined by percentiles.
 * *Head of line bocking*: slow requests block the server from responding to subsequent requests.
 * *Tail latency amplification*: the slowest backend call (even when made in parallel) will determine end-user response time.
 * Types of scaling:
@@ -49,10 +49,10 @@
 
 #### *Maintainability*: People in the future should be able to work on the system *productively*.
 
-* *Operability*: allow operations to keep system running smootly.
-  * Monitoring, security, configuration changes, maintence, documentation/playbooks, good defaults, self-healing, predictability.
+* *Operability*: allow operations to keep system running smoothly.
+  * Monitoring, security, configuration changes, maintenance, documentation/playbooks, good defaults, self-healing, predictability.
 * *Simplicity*: easy for new engineers to understand the system.
-  * Remove *accidental* (not inherint in the problem the software solves, but only from the implementation) complexity by using good *abstraction*.
+  * Remove *accidental* (not inherent in the problem the software solves, but only from the implementation) complexity by using good *abstraction*.
 * *Evolvability*/*extensibility*: easy to make changes to system as requirements change. 
 
 ## Chapter 2 - Data Models and Query Languages
@@ -66,16 +66,16 @@ Reasons for NoSQL adoption:
 * Specialized query operations.
 * More dynamic/expressive data model.
 
-*Impedence mismatch*: disconnect between relational data model and OO application code.
+*Impedance mismatch*: disconnect between relational data model and OO application code.
 
 Example: Modeling a LinkedIn Resume:
 
 * `user_id`, `first_name`, `last_name` as columns in `users` table.
 * positions, education, contact info in separate tables with foreign keys.
-    * or: put mutli-value data in single row with structured datatypes in SQL.
+    * or: put multi-value data in single row with structured datatypes in SQL.
     * or: encode as JSON/XML document in text column.
 * or: use an entirely self-contained JSON document in a document-oriented database.
-    * Pros: reduces impedence mismatch, scehma flexibility, better *locality* (no joins or muiltiple queries), easily represents tree structure of data.
+    * Pros: reduces impedance mismatch, schema flexibility, better *locality* (no joins or multiple queries), easily represents tree structure of data.
 
 #### Many-to-One and Many-to-Many Relationships
 
@@ -98,17 +98,17 @@ Cons:
 
 #### Relational vs. Document Databases Tradeoffs
 
-* Use a document model if your application data has a document-like strucutre (i.e. a tree of one-to-many relationships, where typically the entire tree is loaded at once).
+* Use a document model if your application data has a document-like structure (i.e. a tree of one-to-many relationships, where typically the entire tree is loaded at once).
     * This avoids *shredding* in relational model which splits a document into multiple tables.
     * Avoid *too*-deeply nesting data.
     * Be careful of poor support for joins. 
         * If your application has many-to-many relationships, the document model is less appealing.
         * De-normalizing helps, but application needs to keep denormalized data consistent.
-        * Joins can be emuluated in application code, but is usually slower than DB joins.
+        * Joins can be emulated in application code, but is usually slower than DB joins.
 
 * Document databases are usually *schema-on-read* (aka *schemaless*, implicit schema, interpreted when read), vs. *schema-on-write* in relational DBs.
-	* Analogy to dynamic/runtime vs. compiled  type checking in programming languages.
-* Schema changes in dociument model usually involve `if/else` statements in code vs. `ALTER TABLE`/`UPDATE` migrations in relational model.
+    * Analogy to dynamic/runtime vs. compiled  type checking in programming languages.
+* Schema changes in document model usually involve `if/else` statements in code vs. `ALTER TABLE`/`UPDATE` migrations in relational model.
 
 **Data Locality**
 
@@ -123,7 +123,7 @@ Cons:
 
 #### Declarative Languages
 
-* SQL is a *declarative* language which specifies thhe pattern of data you want (as opposed to a *imperative* programming language where you specify *how* to achieve goal). 
+* SQL is a *declarative* language which specifies the pattern of data you want (as opposed to a *imperative* programming language where you specify *how* to achieve goal). 
 * Declarative languages hides implementation details which allows performance improvements in database engine.
 * Declarative languages lead to parallel execution.
 * CSS is similarly declarative.
@@ -137,7 +137,7 @@ Cons:
 
 * Useful for data with common many-to-many relationships, e.g.
     * Social graphs, Web pages with links, Road or rail networks.
-* Verticies do *not* have to be *homogeneous*: you can represent many different types of objects in a single graph.
+* Vertices do *not* have to be *homogeneous*: you can represent many different types of objects in a single graph.
 
 #### Property Graphs
 
@@ -150,16 +150,16 @@ Each vertex has:
 
 Each edge has:
 
-* A unqiue ID
+* A unique ID
 * The *tail vertex* (at which it starts)
 * The *head vertex* (at which it ends)
-* A label to describe thhe relationship between the two verticies
+* A label to describe the relationship between the two vertices
 * A collection of (key-value) properties
 
-You could store this in two relational tables: verticies and edges. 
+You could store this in two relational tables: vertices and edges. 
 
 * This is much more flexible than a normal relational DB for data modeling.
-* Can traverse the graph with `INDEX`es for tail and head verticies.
+* Can traverse the graph with `INDEX`es for tail and head vertices.
 * Can store several different kinds of information in one graph by having labels for different types of relationships.
 
 #### Cypher Query Language
@@ -197,7 +197,7 @@ A project to represent web sites in a machine-readable format in addition to hum
 * Well-suited for workloads with not too many keys (can keep in memory), but where each key's value is updated frequently (ex: updating number of times a video has been played).
 * Can break log into segment files of a certain size and perform *compaction* on closed segments. Compaction means throwing away duplicate keys in log and keeping only the most recent update for each key.
     * Can also merge across segments (since segments are never modified). Merging and compaction can happen in background threads while serving reads and writes as normal until finished.
-    * Each segment has it's own hash map with file offsets.
+    * Each segment has its own hash map with file offsets.
 * Additional details:
     * Binary format for segment files, not CSV.
     * Deleting records requires a special deletion record (a *tombstone*): can discard previous values when merging.
@@ -224,8 +224,8 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 * [LevelDB](https://github.com/google/leveldb) (Google) and [RocksDB](https://rocksdb.org/) (Facebook) are key-value stores that use the algorithm above.
 * Cassandra and HBase are inspired by Google's BigTable, where *SSTable* and *memtable* were introduced.
-* Full text search is acheived by having a mapping of keys (search *terms*) to values (list of IDs of all documents containing that key/term: the *postings list*).
-	* Lucene, an indexing engine for full-text search used by Elasticsearch and Solr uses this method for storing its *term dictionary*.
+* Full text search is achieved by having a mapping of keys (search *terms*) to values (list of IDs of all documents containing that key/term: the *postings list*).
+    * Lucene, an indexing engine for full-text search used by Elasticsearch and Solr uses this method for storing its *term dictionary*.
 
 * *Bloom filters* are used to optimize reads where the key does not exist (to avoid searching back through all previous segments via disk reads).
 * Compaction/merging strategies:
@@ -281,7 +281,7 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 * Sometimes the compaction process will get in the way of concurrent access. A request may need to wait while the disk finishes an expensive compaction (affects higher percentiles).
     * B-trees can be more predictable.
-* Disk's finite write bandwidth must be shared between initial write (memtable to disk) and background compaction operations.	
+* Disk's finite write bandwidth must be shared between initial write (memtable to disk) and background compaction operations.
 * Must watch out for high write throughput and misconfigured compaction where disk keeps growing and slows down reads and/or runs out of disk.
 
 ### Secondary Indexes
@@ -302,8 +302,8 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 * *Concatenated index* combines several fields into one key by just appending the columns together.
 * *Multi-dimensional indexes* allow you to make range queries across multiple columns at once. E.g. *R-trees*.
-    * Example: query for restaurants within rectangular area, i.e. 2 lattitudes and 2 longitudes.
-    * Example: query for all dates with tempratures between 25 and 30 degrees in 2013 with 2D index on *(date, temprature)*.
+    * Example: query for restaurants within rectangular area, i.e. 2 latitudes and 2 longitudes.
+    * Example: query for all dates with temperatures between 25 and 30 degrees in 2013 with 2D index on *(date, temperature)*.
 
 **Full Text Search and Fuzzy Indexes**
 
@@ -322,7 +322,7 @@ A project to represent web sites in a machine-readable format in addition to hum
     * End-user initiated.
     * Reading a small number of records per query, fetching by key.
     * Random-access, low-latency writes.
-    * Acessing latest state of data.
+    * Accessing latest state of data.
 * OLAP = *online analytic processing*
     * Business analytics for business intelligence.
     * Aggregate over large number of records.
@@ -346,10 +346,10 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 * Many data warehouses use a *star schema* (or *dimensional modeling*).
     * At the center of the schema is the *fact table*, usually as individual events.
-    * Columns in fact table include attributes of event and foreign key refernces to other table, called *dimensional tables*.
+    * Columns in fact table include attributes of event and foreign key references to other table, called *dimensional tables*.
     * Example: purchases in fact table; dates, product info, customer info in dimensional tables.
 * *Snowflake schema*: dimensions are further broken down into subdimensions.
-    * Example: Prodcut dimensional table has foreign keys to brand and category tables.
+    * Example: Product dimensional table has foreign keys to brand and category tables.
     * More normalized but more complicated to work with.
 * Data warehouse tables are usually very wide.
 
@@ -367,7 +367,7 @@ A project to represent web sites in a machine-readable format in addition to hum
     * E.g. *bitmap encoding*:
         * Encodes columns where there are only `n` distinct values with `n` bitmaps, one for each distinct value and one bit for each row.
         * The bit maps can then be run length encoded.
-* Also allows for faster processing via taking advantage of CPU cyles and L1 cache.
+* Also allows for faster processing via taking advantage of CPU cycles and L1 cache.
 
 #### Sort Order in Column Storage
 
@@ -380,7 +380,7 @@ A project to represent web sites in a machine-readable format in addition to hum
 #### Writing to Column-Oriented Storage
 
 * Column optimizations for reads make writes more difficult:
-	* Can't update-in-place with compressed columns without rewriting all the column files.
+    * Can't update-in-place with compressed columns without rewriting all the column files.
 * LSM-trees > B-trees for this with in-memory store then written to disk.
 
 #### Aggregation: Data Cubes and Materialized Views
@@ -389,12 +389,12 @@ A project to represent web sites in a machine-readable format in addition to hum
     * Can use a *materialized view*: the result of some query that's actually cached to disk.
     * When data updates, a materialized view needs to update because it is a denormalized copy of data.
         * Make writes more expensive, which is why they're more common in data warehouses than OLTP databases.
-    * *Data cube* or *OLAP cube*: store aggregate (e.g. `SUM`) of an attribute of all facts with some combiation of dimensions. See Figure 3-12 on pg. 102.
+    * *Data cube* or *OLAP cube*: store aggregate (e.g. `SUM`) of an attribute of all facts with some combination of dimensions. See Figure 3-12 on pg. 102.
 
 
 ## Chapter 4 - Encoding and Evolution
 
-Because of staged server rollouts and installed client apps, software needs to handle old/new data formats and schema changes (*backwards* and *forwards* compatability).
+Because of staged server rollouts and installed client apps, software needs to handle old/new data formats and schema changes (*backward* and *forwards* compatibility).
 
 ### Formats for Encoding Data
 
@@ -470,12 +470,12 @@ Used for:
 **REST**
 
 * Design philosophy building off of HTTP. Uses URLs for identifying resources and HTTP features for cache control, authentication, content type negotiation.
-* Gaining in popularity. Less standards, but can use, e.g., Swagger to describe REST APIs and produce documentation.
+* Gaining in popularity. Fewer standards, but can use, e.g., Swagger to describe REST APIs and produce documentation.
 
 **SOAP**
 
 * XML-based protocol over HTTP but does not rely on HTTP features, instead re-builds them as part of the *web services framework* (*WS-\**).
-* API is described using XML veriant called WSDL (Web Services Description Language) which enables code generation for local classes/methods for making API calls.
+* API is described using XML variant called WSDL (Web Services Description Language) which enables code generation for local classes/methods for making API calls.
 * WSDL and SOAP messages are not easily human-readable, so requires tooling support.
 * Burdensome to integrate with, falling in popularity.
 
@@ -499,7 +499,7 @@ Used for:
 
 **Data encoding and evolution for RPC**
 
-* OK to assume servers will be deployed before clients, so OK to only hace backward compat.
+* OK to assume servers will be deployed before clients, so OK to only have backward compat.
 * For public APIs, often need to version via URL, `Accept` header, or API key/admin dashboard because org has no control over client upgrades.
 
 #### Message-Passing Dataflow
@@ -509,8 +509,8 @@ Used for:
 * Low latency like RPCs. Message is not sent via direct connection (like DB), but goes through an intermediary (*message broker/queue*).
 * Advantages:
     * Queue acts as a buffer if recipient is unavailable/overloaded (improves reliability).
-    * Can re-deliver messages to crashed processes, previnting loss.
-    * No need to know IP/port of recipeint.
+    * Can re-deliver messages to crashed processes, preventing loss.
+    * No need to know IP/port of recipient.
     * One message can be sent to many recipients.
     * Logically decouples sender/recipient.
 * Message passing can only go one-way though.
@@ -521,7 +521,7 @@ Used for:
 * Process sends message to a `queue` or `topic` and *consumers*/*subscribers* to that queue/topic.
 * Can be many producers/consumers per topic.
 * Topics are one way, so to have two-way data flow, must reply to a queue that is subscribed to by the original sender.
-* Choose your own encoding and data model. Backwards and forwards compat preferrable.
+* Choose your own encoding and data model. Backward and forwards compat preferable.
 
 **Distributed Actor Frameworks**
 
