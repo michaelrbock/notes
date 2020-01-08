@@ -1,4 +1,4 @@
-# Designing Data-Intensive Applications - Part I
+# Designing Data-Intensive Applications - Part I - Foundations of Data Systems
 
 [Goodreads](https://www.goodreads.com/book/show/23463279-designing-data-intensive-applications)
 
