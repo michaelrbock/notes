@@ -525,14 +525,82 @@ Conventional search engines first index the documents and then run queries over 
 
 **Message passing and RPC**
 
-Message passing systems are an alternative to RPC, for example in the actor model, but they aren't the same as stream processors:
+Message-passing systems are an alternative to RPC, for example in the actor model, but they aren't the same as stream processors:
 
 * Actor frameworks are primarily a mechanism for managing concurrency vs. stream processing which is for data management.
-* Communication betwene actors is one-to-one and ephemeral vs. durable and multi-subscriber.
+* Communication between actors is one-to-one and ephemeral vs. durable and multi-subscriber.
 * Actors can communicate in arbitrary ways (including cyclic) vs acyclic pipelines for stream processing.
 
 But there is some crossover, e.g. Apache Storm *distributed RPC*.
 
 #### Reasoning about Time
+
+Stream processors often deal with time, especially for computing analytics over a window. Many stream processing frameworks use the local system clock on the processing machine (the *processing time*) which can cause problems if there is processing lag.
+
+**Event time versus processing time**
+
+There are many reasons why processing may be delayed: queueing, network faults, performance issues on the broker or processor, a consumer restart, or reprocessing old events.
+
+Message delays can lead to unpredictable ordering of messages: for example two web requests from the same user that are processed on different servers - a stream processor could see them as out of order.
+
+Confusing event time could lead to bad data, e.g. what *looks* like a spike in request rate/QPS.
+
+**Knowing when you're ready**
+
+A tricky problem when defining windows in terms of event time is that you can never be sure when you have received all of the events for a particular window or whether there are *straggler* events still to come. Two options:
+
+1. Ignore straggler events, as they are probably a small percentage of events. You can track and alert on the number of dropped events itself as a metric.
+1. Publish a *correction*: an updated value for the window with stragglers included.
+
+**Whose clock are you using, anyway?**
+
+Events can be buffered at several points in time, e.g. a mobile app reporting usage metric events to a server. The app could be used offline and buffer the events locally before coming back online and sending them to a server. These could appear as extremely delayed stragglers, so we should really use the device's local clock. But we can't trust the clock on a user-controlled device. To adjust, log three timstamps:
+
+1. The time at which the event occured, according to the device clock.
+1. The time at which the event was sent to the server, according to the device clock.
+1. The time at which the event was received by the server, according to the server clock.
+
+By subtracting the 2nd from the 3rd, we can estimate the offset between the device clock and the server clock.
+
+**Types of windows**
+
+* *Tumbling window*: has a fixed length and every event belongs to exactly one window, e.g. a 1-min window and all events with timestamps between 10:03:00 and 10:03:59 are grouped into one window, and events between 10:04:00 and 10:04:59 another.
+* *Hopping window*: has a fixed length, but allows windows to overlap to provide smoothing. E.g. a 5-min window with a hop size of 1-min contains events between 10:03:00 and 10:07:59 and the next window covers 10:04:00 and 10:08:59.
+* *Sliding window*: contains all the events that occur within some interval of each other, e.g. 5 minutes.
+* *Session window*: has no fixed duration, but ends after some period of inactivity. E.g. all events for the same user that occur closely together in time until the user has been inactive for 30 min.
+
+#### Stream Joins
+
+There are three types of joins in stream processing: *stream-stream joins*, *stream-table joins*, and *table-table joins*.
+
+**Stream-stream join (window join)**
+
+Example: calculating search result click-through rate by recording search query events and click events.
+
+To implement this, a stream processor must maintain *state*, e.g. all events that occurred in the last hour, indexed by session ID. When a search or click event occurs, it is added to the appropriate index, and the stream processor also checks the other index to see if another event for the same session ID already arrived. If there is a matching event, the processor emits an event saying which search result was clicked. If the search event expires without seeing a matching click, emit an event saying which search results were not clicked.
+
+**Stream-table join (stream enrichment)**
+
+Example: user activity events need to be *enriched* with profile information from the user db.
+
+To do this, the stream process needs to look at one activity event at a time, look up the event's user ID in the db. But we shouldn't query a remote db. Instead, we should load a copy of the db into the stream processor so it can be queried locally.
+
+The stream processor needs to keep this db up-to-date, though. This can be done with CDC.
+
+**Table-table join (materlized view maintence)**
+
+Example: keeping a per-user cache of their Twitter timeline.
+
+To implement, need streams of tweets (send and delete) and follows/unfollows. The stream process needs to maintain a db containing the set of followers for each user so it knows which timelines need to be updated.
+
+i.e. the stream process maintains a materialized view for a query that joins two tables (tweets and follows).
+
+**Time-dependence of joins**
+
+What if there is a time dependence between a stream and the data it needs to be joined with? Example: calculating tax rate for invoices when the tax rate occassionally changes.
+
+This issue is known as *slowly changing dimension (SCD)* and it is solved by using a unique identifier for a particular version of the joined record. This makes the join deterministic but makes log compaction not possible.
+
+#### Fault Tolerance
 
 
