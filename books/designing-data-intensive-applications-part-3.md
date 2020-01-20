@@ -603,4 +603,23 @@ This issue is known as *slowly changing dimension (SCD)* and it is solved by usi
 
 #### Fault Tolerance
 
+In batch processing, even if a task fails, it can be transparently retried, so even if a record was processed multiple times, the visible effect in the output is the same as if it was processed once. This is known as *exactly-once semantics* or, better, *effectively-once*.
+
+**Microbatching and checkpointing**
+
+One solution for fault tolerance in streaming is to break the stream into small blocks and treat each block like a mini batch process: *microbatching*. 
+
+You can also generate rolling checkpoints of state and write them to durable storage. A crashed stream operator can restart from the most recent checkpoint.
+
+**Atomic commit revisited**
+
+To provide exactly-once processing in the presence of faults, all outputs and side effects of processing an event take effect *if and only if* the processing is successful. E.g. message sent downstream, db writes, external messages (email or push), acks of incoming message.
+
+These should all happen atomically or none at all.
+
+**Idempotence**
+
+An *idempotent* operation is one you can perform multiple times and has the same effect as if you performed it only once.
+
+You can make a non-idempotent operation idempotent by including extra metadata. e.g. in Kafka, every message has a monotonically increasing offset. Including that offset in a write to an external database can tell you whether an update has already been applied.
 
