@@ -468,4 +468,71 @@ On the other hand, event sourcing makes multi-object transactions less needed (t
 
 **Limitations of immutability**
 
+If there is significant churn in the database, i.e. a high rate of updates and deletes on a relatively small database, the immutable history may grow prohibitively large.
+
+There are also cases where you need data to be truly deleted (as if it was never written), for privacy regulation reasons, for example. This is known as *excision* or *shunning*.
+
+### Processing Streams
+
+Options for processing streams:
+
+1. Take the event data and write it to a derived data sytem (e.g. db, cache, search index).
+1. Push the events to users/humans, e.g. email, push notif, stream to dashboard.
+1. Process one or more input streams and produce one or more output streams. Streams may go through a pipeline of several processing stages before going to an output.
+
+A piece of code that processes a stream is known as an *operator* or *job*.
+
+#### Uses of Stream Processing
+
+Stream processing is classically used for monitoring & alerting if a certain thing happens, for example:
+
+* Fraud detection, trading systems, manufactoring systems, military intelligence.
+
+**Complex event processing**
+
+*Complex event processing (CEP)* (from the 1990's) uses a high-level declarative query language like SQL to describe the patterns of events that should be detected. The queries are submitted to the processing engine that consumes the input streams. When a match is found, a *complex event* is emitted.
+
+The relationship between queries and data is reversed compared to normal databases: queries are stored long-term and events from input streams continuously flow past. In a normal db a query is forgotten by the db after it has been processed.
+
+**Stream analytics**
+
+*Analytics* on streams is for computing aggregations and statistical metrics over a large number of events, for example:
+
+* Measuring the rate of some event.
+* Calculating the rolling average of a value over a time period.
+* Comparing current statistics to previous time intervals (e.g. to detect trends or alert).
+
+Such statistics are usually computed over some time interval, known as a *window*.
+
+Stream analytics sometimes use probabilistic algorithms (e.g. Bloom filter, percentile estimation) as an optimization. But stream processing is not inherently approximate.
+
+Frameworks: Apache Storm, Spark Streaming, Kafka Streams.
+
+**Maintaining materialize views**
+
+A stream of changes to a database can be used to keep derived data systems, such as caches, search indexes, and data warehouses up to date with a source database. In these cases, it is not sufficient to consider only events within a time window: building a *materialized view* potentially requires *all* events, apart from obsolete events that may be discarded by log compaction.
+
+**Search on streams**
+
+We sometimes need to search for individual events based on complex criteria, such as full-text search queries. Use case examples: 
+
+* Media monitoring the news for stories mentioning a certain topic/company/product.
+* Users of a real estate website being notified when a new property matching their criteria is posted.
+
+This is done by formulating a search query in advance and then continually matching the stream against this query.
+
+Conventional search engines first index the documents and then run queries over that index. Searching a stream turns the processing around: the queries are stored, and the documents run past the queries.
+
+**Message passing and RPC**
+
+Message passing systems are an alternative to RPC, for example in the actor model, but they aren't the same as stream processors:
+
+* Actor frameworks are primarily a mechanism for managing concurrency vs. stream processing which is for data management.
+* Communication betwene actors is one-to-one and ephemeral vs. durable and multi-subscriber.
+* Actors can communicate in arbitrary ways (including cyclic) vs acyclic pipelines for stream processing.
+
+But there is some crossover, e.g. Apache Storm *distributed RPC*.
+
+#### Reasoning about Time
+
 
