@@ -304,3 +304,168 @@ To differentiate, you must ask two questions:
 
 Whether messages can be lost depends on the application: e.g. for sensor readings it may be OK to ocassionally lose a message, but if counting, it's not.
 
+**Direct messaging from producers to consumers**
+
+These require the application code to be aware of the possibility of message loss and for the producer and consumer to be 100% available. Examples:
+
+* UDP multicast.
+* Brokerless messaging libraries, e.g. ZeroMQ.
+* StatsD
+* Direct HTTP/RPC requsts, e.g. webhooks.
+
+**Message brokers**
+
+A *message broker* (or *message queue*) runs as a server/database that producers and consumers connect to. By centralizing, these systems can handle clients that connect, disconnect, or crash and durability is handled by the broker. Some message brokers only keep messages in memory, others write to disk so they are not lost in case of a broker crash.
+
+Consumers are *asynchronous*: producers only wait for the broker to confirm, delivery to consumers will happen at some point in the future.
+
+**Message brokers compared to databases**
+
+* Message brokers usually delete a message after it has been successfully delivered to its consumers.
+* Message brokers assume the queues are fairly short. Throughput may degrade if the broker needs to buffer many messages.
+* Message brokers do not support arbitrary queries.
+
+JMS and AMQP are message broker standards. Examples: RabbitMQ, ActiveMQ, ...
+
+**Multiple consumers**
+
+There are two patterns for multiple consumers reading messages in the same topic:
+
+*Load Balancing*: each message is delivered to *one* consumer, so the consumers can share the work of processing the messages in the topic. Useful when messages are expensive to process.
+
+*Fan-out*: each message is delivered to *all* consumers.
+
+**Acknowledgements and redelivery**
+
+Consumers may crash, so its possible a broker delivered a message but the consumer never/partially processed it. To ensure messages aren't lost, message brokers use *acknowledgements*: a client must explicitly tell the broker when it has finished processing a message so the broker can remove it.
+
+If the connection to a client is closed or times out, the broker assumes the message wasn't processed and delivers the message to another consumer. Handling the case where a message *was* processed but the ack was lost by the network requires atomic commit.
+
+Combining redelivery with load balancing means that consumers may see messages out of order. To avoid: don't use load balancing. This is only a problem if the messages are causally dependent.
+
+#### Partitioned Logs
+
+In batch systems, you can re-run jobs without damaging the input. In AMQP/JMS messaging: receiving a message is destructive if the ack causes it to be deleted from the broker. If you add a new consumer to the messaging system, it only starts receiving messages sent *after* it was registered.
+
+The hybrid of durable storage approach of databases with low-latency notifications of messaging is the idea behind *log-based message brokers*.
+
+**Using logs for message storage**
+
+We can use a log (an append-only sequence of records on disk) to implement a message broker: a producer sends a message by appending it to the end of the log, and a consumer receives messages by reading the log sequentially. If a consumer reaches the end of the log, it waits for a notification that a new message has been appended, like `tail -f`.
+
+In order to scale throughput, the log can be *partitioned*, and different partitions can be hosted on different machines. A topic is defined as a group of partitions that all carry messages of the same type.
+
+Within each partition, the broker assigns a monotonically increasing sequence number, or *offset*, to every message. So messages *within* (not across multiple) a partition are totally ordered.
+
+Apache Kafka, Amazon Kinesis are examples. Can acheive throughput of millions of messages/second and fault tolerance with replication.
+
+**Logs compared to traditional messaging**
+
+To achieve load balancing across consumers, the broker assigns entire partitions to nodes in the consumer group. Each client then consumes *all* the messages in the partitions it has been assigned, sequentially in a single thread. Downsides:
+
+* The number of nodes sharing the work of consuming a topic is at most the number of log partitions in that topic, because messages within the same partition are delivered to the same node.
+* If a single message is slow to process, it holds up the processing of subsequent messages.
+
+If messages are expensive to process and you want to parallelize processing on a message-by-message basis, and ordering is not important, use JMS/AMQP message broker. In situations with high message throughput, where each message is fast to process and message ordering is important, the log-based approach works well.
+
+**Consumer offsets**
+
+Consuming a partition sequentially makes it easy to tell which messages have been processed: all messages with an offset less than a consumer's current offset have already been processed. No acks needed (higher throughput). If a consumer node fails, another node in the group is assigned to the failed consumer's partitions, and it starts consuming messages at the last recorded offset.
+
+**Disk space usage**
+
+The log is divided into segments and old segments are deleted or moved to archive storage. Logs implement a *circular buffer* or *ring buffer* that discards old messages when it gets full.
+
+**When consumers cannot keep up with producers**
+
+Log-based approach uses a form of buffering with a large, fixed-size buffer (limited by disk space). If a consumer falls too far behind, it may miss old messages that are not retained on disk by the broker.
+
+One consumer falling behind does not affect another. You can also experimentally consume a production log for dev/testing without disrupting production services.
+
+**Replaying old messages**
+
+In a log-based system, reading messages does not have a deletion side effect like in AMQP/JMS-sytle brokers. Thus you can start reading at different points in time, with different processing code: which allows for more experimentation and easier recovery from bugs.
+
+### Databases and Streams
+
+An event could be a *write to a database*. Ex: a replication log is a stream of database event, produced by the leader that followers apply. *State machine replication* in total order broadcast is another case of event streams.
+
+#### Keeping Systems in Sync
+
+Most applications need to combine multiple different storage technologies to satisfy needs, each with its own copy of the data. This data needs to be kept in sync. Sometimes this is done by an ETL process or batch job. If this is too slow, an alternative is *dual writes*, where application code explicitly writes to multiple systems when data changes.
+
+Dual writes have the problem of race conditions and fault tolerance if one write fails and one succeeds.
+
+#### Change Data Capture
+
+*Change data capture (CDC)* is the process of observing all data changes written to a database and extracting them in a form in which they can be replicated to other systems: changes can be made available as a stream immediately as they are written.
+
+**Implementing change data capture**
+
+CDC makes one database (the system of record) the leader and turns the others (derived data systems) into followers. We use a log-based message broker for transporting change events since it preserves the ordering of messages. CDC is usually asynchronous.
+
+**Initial snapshot**
+
+Often it makes sense to start with a snapshot of the db that corresponds to a known position/offset in the change log. This way you don't have to keep all changes forever which might require too much disk space.
+
+**Log compaction**
+
+*Log compaction* is an alternative to the snapshot process. The storage engine can periodically (in the background) look for log records with the same key, throw away duplicates, and keep only the most recent update for each key. A *tombstone* is used to indicate a key was deleted (and can be removed during compaction).
+
+To rebuild a derived data system: can simply start at offset 0 in a compacted log and scan over all messages.
+
+This is supported by Kafka and allows message broker to be used for durable storage.
+
+**API support for change streams**
+
+Some newer dbs support CDC as a first-class interface, e.g. RethinkDB, Firebase, and CouchDB.
+
+#### Event Sourcing
+
+*Event sourcing* is similar to CDC, but events are stored at a different layer of abstraction:
+
+* Application logic is explicitly built on basis of immutable events that are written to an append-only event log. Events are designed to reflect things that happened at the application level, rather than low-level db state changes.
+
+Event sourcing makes it easier to evolve the application over time, helps with debugging by making it easier to understand why something happened, and guards against application bugs.
+
+Example: storing the event "student cancelled their course enrollment" instead of the side effects "one entry was deleted from the enrollments table and one cancellation reason was added to the student feedback table" (which embeds assumptions about the data).
+
+**Deriving current state from the event log**
+
+Applications that use event sourcing need to be able to deterministically transform the log of events (how the data was *written*) into the current state for showing to the user.
+
+Log compaction is not possible as in CDC because later events do not necessarily override earlier events and events are modeleted at a higher level. Therefore applications that use event sourcing usually have a mechanism for storing snapshots of current state.
+
+**Command and events**
+
+When a request from a user first arrives, it is a *command*: it could still fail, e.g. if it violates a constraint (ex: registering a username, booking a seat on a plane). After the check has succeeded, the *event* is generated. It becomes a *fact*.
+
+#### State, Streams, and Immutability
+
+Databases store the current state of the application: this representation is optimized for reads. An append-only log of immutable changes, the *changelog*, represents the evolution of a mutable state over time.
+
+**Advantages of immutable events**
+
+Like an accountant keeping a *ledger*, an append-only log of immutable events allows auditability, which is beneficial for many systems. E.g. financial systems or making it easier to diagnose buggy code that writes bad data to the db.
+
+Immutable events also capture more info than the current state. Example: a user adds an item to their cart then removes it. This is recorded in an event log, but lost in a database that deletes the item.
+
+**Deriving several views from the same event log**
+
+By separating mutable state from the immutable event log, you can derive several different read-oriented representations from the same log of events: like having mutliple consumers of a stream.
+
+Having an explicit translation step from an event log to a database makes it easier to evolve your application over time: you can use the event log to build a separate read-optimized view and run it alongside the existing systems. Running new and old systems side by side is easier than performing a schema migration.
+
+You gain flexibility by separating the form in which the data is written from the form it is read and by allowing several different read views. This is known as *command query responsibility segregation (CQRS)*.
+
+**Concurrency control**
+
+The biggest downside of event sourcing and CDC is that the event log consumers are usually asynchronous so you may not be able to "read your own writes".
+
+One solution is to perform updates to the read view synchronously with appending to the event log. This requires a transaction, so you need to keep the event log and the read view in the same storage system or you need a distributed transaction across different systems.
+
+On the other hand, event sourcing makes multi-object transactions less needed (the event can be atomic). If the log and application state are partitioned the same way, then a single-threaded log consumers needs no concurrency control for writes.
+
+**Limitations of immutability**
+
+
