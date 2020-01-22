@@ -623,3 +623,20 @@ An *idempotent* operation is one you can perform multiple times and has the same
 
 You can make a non-idempotent operation idempotent by including extra metadata. e.g. in Kafka, every message has a monotonically increasing offset. Including that offset in a write to an external database can tell you whether an update has already been applied.
 
+## Chapter 12: The Future of Data Systems
+
+### Data Integration
+
+There is unlikely to be one piece of software that is suitable for *all* the different read patterns for your data.
+
+#### Combining Specialized Tools by Deriving Data
+
+For example, it is common to need to integrate an OLTP db with a search index, cache, analytics systems, etc.
+
+**Reasoning about dataflows**
+
+If you can, it's preferrable to write all data first to a system of record, capturing changes, and applying them in the same order (via CDC) to derived data systems. This is better than concurrently writing directly to multiple datastores at the same time, which can cause conflicting writes.
+
+**Derived data versus distributed transactions**
+
+
