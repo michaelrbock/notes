@@ -639,4 +639,6 @@ If you can, it's preferrable to write all data first to a system of record, capt
 
 **Derived data versus distributed transactions**
 
+The classic approach for keeping different data systems in sync involves distributed transactions (atomic commit and 2PC). CDC & event sourcing use a log for ordering vs locks for mutual exclusion in distributed transactions. Distributed transactions use atomic commit vs deterministic retry & idempotence in log-based systems to make sure events take place exactly once.
 
+Transaction systems usually provide linearizability (read your own writes) whereas derived data systems are often updated asynchronously.
