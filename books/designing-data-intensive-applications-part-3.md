@@ -642,3 +642,18 @@ If you can, it's preferrable to write all data first to a system of record, capt
 The classic approach for keeping different data systems in sync involves distributed transactions (atomic commit and 2PC). CDC & event sourcing use a log for ordering vs locks for mutual exclusion in distributed transactions. Distributed transactions use atomic commit vs deterministic retry & idempotence in log-based systems to make sure events take place exactly once.
 
 Transaction systems usually provide linearizability (read your own writes) whereas derived data systems are often updated asynchronously.
+
+**The limits of total ordering**
+
+Limitations of a single-leader replication system (that de facto has a totally ordered log): 
+
+* Cannot partition if needed because of need for a *single leader node*.
+* Cannot handle *geographically distributed* datacenters (which each usually have their own leader).
+* *Microservices* usually each have their own storage, with no durable state shared.
+* Clients with client-side state or offline operation.
+
+**Ordering events to capture causality**
+
+Sometimes, two events have a causal dependency, e.g. unfriend and then post on your facebook wall. Notifications for this are effectively a join between posts and friends.
+
+
