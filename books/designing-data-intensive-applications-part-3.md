@@ -654,6 +654,38 @@ Limitations of a single-leader replication system (that de facto has a totally o
 
 **Ordering events to capture causality**
 
-Sometimes, two events have a causal dependency, e.g. unfriend and then post on your facebook wall. Notifications for this are effectively a join between posts and friends.
+Sometimes, two events have a *causal dependency*, e.g. unfriend and then post on your facebook wall. Notifications for this are effectively a join between posts and friends. There is no easy solution. Some ways to partially solve:
 
+* Logical timestamps when total order broadcast is not feasible.
+* Log an event to record the state of the system the user saw before making a decision and give that event a unique ID that later events can reference.
+* Conflict resolution algorithms for maintaining state, but not if the actions have external side effects.
 
+#### Batch and Stream Processing
+
+The goal of data integration is to make sure that data ends up in the right form in all the right places. Batch and stream processors are starting to become less distinct over time.
+
+**Maintaining derived state**
+
+Batch processing is functional: it encourages deterministic, pure functions, whose output depends only on the input and has no side effects and immutable inputs.
+
+Unlike synchronously-updated systems like relational dbs with secondary indexes, asynchrony makes systems based on logs robust: faults in one part of the system are contained locally.
+
+**Reprocessing data for application evolution**
+
+Batch and stream processing are useful for deriving and maintaining new views on an existing dataset. Reprocessing existing data is a good mechanism for evolving to support new features and changing requirements.
+
+Derived views allow *gradual* evolution: instead of performing a sudden schema change, you can maintain the old and new schema side by side and shift users over time.
+
+**The lambda architecture**
+
+The *lambda architecture* uses a combination of batch and stream processing: the stream processor consumes the events and quickly produces an approximate update to the view; the batch processor later consumes the *same* events and produces a corrected version of the derived view.
+
+**Unifying batch and stream processing**
+
+Unifying batch and stream processing without the downsides of lambda architecutre requires:
+
+* The ability to replay historical events through the same processing engine that handles the recent event stream.
+* Exactly-once semantics for stream processors (e.g. ensuring the output is the same as if no faults had occurred).
+* Tools for windowing by event time, not processing time.
+
+### Unbundling Databases
