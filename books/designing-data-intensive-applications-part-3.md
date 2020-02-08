@@ -689,3 +689,166 @@ Unifying batch and stream processing without the downsides of lambda architecutr
 * Tools for windowing by event time, not processing time.
 
 ### Unbundling Databases
+
+Unix gives programmers a fairly low-level hardware abstraction (files, processes, pipes) vs. Relation Databases that give a high-level abstraction hiding data structures on disk, concurrency, crash recovery.
+
+#### Composing Data Storage Technologies
+
+There are parallels between database features and batch and stream processing-based derived data systems.
+
+**Creating an index**
+
+Running `CREATE INDEX` is similar to setting up a new follower replica and taking the initial snapshot for a change data capture in a streaming system.
+
+When creating an index, the db reprocesses the existing dataset and derives an index as a new view of the existing data.
+
+**The meta-database of everything**
+
+Dataflow across an entire organization looks like one huge database, where batch/stream/ETL processes transport data and keep materialized views up to date. How to compose different storage/processing systems in a cohesive system?
+
+*Federated databases: unifying reads*: aka *polystore* provides a unified query interface to a wide variety of underlying storage engines and processing methods. Apps can still access the underlying storage engines directly if needed, and others can combine data from disparate places.
+
+This is similar to the relational model of having a high-level query language with a complicated underlying implementation.
+
+*Unbundling databases: unifying writes*: unbundling a database's index-maintence feature to allow synchronized writes across disparate technologies. Similar to composing Unix tools together via pipes.
+
+**Making unbundling work**
+
+Federated read-only querying is a manageable problem. Keeping writes to several storage systems in sync is harder.
+
+Distributed transactions across heterogenous storage systems is the wrong solution; asynchronous event log with idempotent writes is more robust & practical. Advantage is *loose coupling*:
+
+* Asynchronous event streams make the system more robust to outages of individual components: e.g. one slowed-down consumer doesn't affect the others.
+* Allows for easier software development where different teams are responsible for different components and services.
+
+**Unbundled versus integrated systems**
+
+The advantages of unbundling and composition of several storage technologies only comes into the picture when there is no single piece of software that satisfies all your requirements.
+
+**What's missing?**
+
+We don't yet have the unbundled-database equivalent of Unix shell, e.g. `mysql | elasticsearch`.
+
+#### Designing Applications Around Dataflow
+
+Unbundling databases by composing specialized storage and processing systems is also known as the "database inside-out" approach.
+
+What we want is the spreadsheet functionality of having a formula in one cell and whenever the input to the formula changem the result of the formula is automatically recalculated, but for data systems.
+
+**Application code as derivation function**
+
+When one dataset is derived from another, it goes through a transformation function. The simplest is built into many databases: `CREATE INDEX`. But many others require application-specific code, e.g. full-text search, machine learning feature engineering, caches for displaying UI.
+
+**Separation of application code and state**
+
+Most web applications are deployed as stateless services. State management is handled by databases, which contain the shared mutable state.
+
+Unlike spreadsheets, readers of a variable usually aren't notified if the value of a variable changes: subscribing to changes (i.e. change streams) is a relatively new feature.
+
+**Dataflow: Interplay between state changes and application code**
+
+Unbundling the database means taking the approach of keeping a secondary index up-to-date and applying it to the creation of dervied datasets outside the primary db: caches, full-text search indexes, machine learning systems, etc. This requires stream processing and messaging systems with the following features which are available:
+
+* Stable message ordering.
+* Fault tolerance (no lost messages).
+
+**Stream processors and services**
+
+Example: a customer is purchasing a an item priced in one currency but paid in another. This could be implemented as:
+
+1. In a REST/microservices approach, the code that processes the purchase would query an exchange-rate service/database to get the current exchange rate.
+1. In the dataflow approach, the code that processes purchases would subscribe to a stream of exchange rate updates ahead of time and record the current rate in a local database when it changes.
+
+The second approach replaces a synchronous network request to another service with a query to a local db: created via a stream-stream join between purchase and exchange rate. There is however, a time dependence between the events that needs to be handled.
+
+#### Observing Derived State
+
+The *write path* is the process that happens whenever some piece of information is written to the system (precomputed).
+
+The *read path* is how the system responds to a user request to read from a derived dataset (only happens when someone asks).
+
+Taken together, the paths encompass the whole journey of the data.
+
+**Materialized views and caching**
+
+The role of caches, indexes, and materialized views is to shift the boundary between write path and read path. They allow us to do more work on the write path, by precomputing results, in order to save effort on the read path.
+
+**Stateful, offline-capable clients**
+
+There is an assumption that clients are stateless and servers have authority over data (e.g. a web browser). But recent developments, single-page JS and mobile apps, have gained stateful capabilities: these are *offline-first* applications. On-device state can be thought of as a *cache of state on the server*.
+
+**Pushing state changes to clients**
+
+Recent protocols have moved beyond the basic request/response pattern of HTTP: e.g. EventSource API and WebSockets, which allow the server to actively inform the end-user client about any changes to the state.
+
+Actively pushing state changes all the way to client devices means extending the write path all the way to the end user! The stream processing ideas therefore are not only for running in a datacenter: the can be extended all the way to end-user devices:
+
+* Using the read path to get its initial state, then relying on a stream of state changes sent by the server.
+* Using consumer offsets to come back online after being offline.
+
+**End-to-end event streams**
+
+You could imagine a system where state changes flow through an end-to-end write path from the interaction on one device, via event logs and through (several) derived data systems and stream processors, all the way to the UI on another device.
+
+The assumption of stateless clients and request/response interactions is deeply ingrained in our dbs, frameworks, libraries, protocols. In order to extend the write path, we would have to rethink how we build systems toward the publish/subscribe model.
+
+**Reads are events too**
+
+It is possible to represent read requests as streams of events, and send both read and write events through a stream processor: the processor responds to read events by emitting the result of the read to an output stream.
+
+This is the same as performing a stream-table join between the stream of read queries and the database. Recording a log of read events has potential benefits: e.g. for reconstructing state (e.g. what the user saw) for analytics.
+
+### Aiming for Correctness
+
+#### The End-to-End Argument for Databases
+
+Even with strong safety properties from a database, application bugs can occur that cause data loss/corruption. Immmutable/append-only data makes it easier to recover from such mistakes, but it is not a cure-all either.
+
+**Exactly-once execution of an operation**
+
+Processing twice is a form of data corruption. *Exactly-once* means the final effect of the computation is the same as if no faults had occurred. This usually requires *idempotence*.
+
+**Duplicate suppression**
+
+In many databases, a transaction is tied to a client's TCP connection: the db knows several queries belong to the same transaction because they are on the same TCP connection.
+
+If a client suffers a network interruption and connection timeout after sending the `COMMIT`, but before hearing back, it does not know whether the transacton has been committed or aborted.
+
+Even with Two-Phase Commit, we can't be sure that a transaction will only be executed once. The end-user's network connection could be bad and they could manually re-send a `POST` request.
+
+**Operation identifiers**
+
+To make an operation idempotent through several hops of network communication, you need to consider the *end-to-end* flow of the request.
+
+You can generate a unique identifier (e.g. UUID) and include it as a hidden form field or calculate a hash of all fields to derive an operation ID. If the browser submits the POST twice, the two requests will have the same operation ID. You pass the operation ID all the way through the db and check that you only ever execute one operation with a given ID (with uniqueness constraint on the operation ID column).
+
+**The end-to-end argument**
+
+The *end-to-end arugment* states that some *function in question* (e.g. duplicate supression, data integrity checking) cannot be solved at the communication system (e.g. TCP, database transaction, stream processor) level, but only at the application level. It requires an end-to-end solution from client to database.
+
+That's not to say low-level features (e.g. TCP duplicate supression, Ethernet checksums, WiFi encryption) aren't useful! Just that they cannot provide desired end-to-end correctness features by themselves.
+
+**Applying end-to-end thinking in data systems**
+
+Just because an application uses a data system that provides comparatively strong safety properties, such as serializable transactions, that does not mean the application is guaranteed to be free from data loss or corruption.
+
+#### Enforcing Constraints
+
+Ther are several examples of application features that need to enforce uniqueness: a username or email address, two people cannot book the same seat on a flight/in a theater. This is similar to not selling more items than you have in stock or booking overlapping meetings in a room.
+
+**Uniqueness constraints require consensus**
+
+In a distributed setting, enforcing a uniquness constraint requires consensus. This can be achieved by using single-leader replication. To scale this, you can partition based on the value that needs to be unique: for example by request ID routing to the same partition or hash of username.
+
+Asynchronous multi-leader replication will not work for enforcing a uniquness constraint
+
+**Uniqueness in log-based messaging**
+
+A log ensures that all consumers see messages in the same order: a guarantee that is known as total order broadcast and is equivalent to consensus.
+
+Therefore a log-based stream processor can unambiguously and deterministically decide which of several conflicting operations came first. E.g. for claiming a username:
+
+1. Each request for a username is appended as a message to a partition based on the hash of the username.
+1. Stream processor reads the requests in the log, using a local db to keep track of which usernames are taken. It emits succes and rejection messages to an output stream for each username request.
+1. The requesting client watches the output stream and waits for success/rejection.
+
