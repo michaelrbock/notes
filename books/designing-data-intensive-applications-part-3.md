@@ -852,3 +852,76 @@ Therefore a log-based stream processor can unambiguously and deterministically d
 1. Stream processor reads the requests in the log, using a local db to keep track of which usernames are taken. It emits succes and rejection messages to an output stream for each username request.
 1. The requesting client watches the output stream and waits for success/rejection.
 
+**Multi-partition request processing**
+
+Ensuring an operation is executed atomically across multiple partitions is more interesting. Traditionally, this would require atomic commit across partitions, which degrades throughput.
+
+Correctness can also be achieved with partitioned logs without atomic commit:
+
+1. The request is given a unique request ID by the client, and appended to a log partition based on the request ID.
+1. A stream processor reads the log of requests. For each request message it emits two messages tooutput streams. The original request ID is included in those emitted messages.
+1. Further processors consume the streams of instructions, deduplicate by request ID, and apply the changes.
+
+Exactly-once correctness property is achieved by breaking down the multi-part transaction into two differently partitioned stages and using the end-to-end request ID.
+
+#### Timeliness and Integrity
+
+Transactions are convenient because they are typically linearizable, whereas consumers of a log are asynchronous by design. However, it is possible for a client to wait for a message to appear on an output stream.
+
+*Consistency* conflates two different requirements:
+
+* *Timeliness*: ensuring users observe the system in an up-to-date state. Reading stale copy of the data is a temporary inconsistency. CAP theorem uses "consistency" to mean linearizability (strong timeliness). Weaker timeliness includes *read-after-write*.
+* *Integrity*: absence of corruption (no data loss or false data). E.g. an index must be correct. If integrity is violated, the inconcsistency is permanent. The C in ACID.
+
+Violations of timeliness are "eventual consistency", wheras violations of integrity are "perpetual inconsistency".
+
+**Correctness of dataflow systems**
+
+ACID transactions provide both timeliness (e.g. linearizability) and integrity (e.g. atomic commit).
+
+Event-based dataflow systems however, decouple timeliness and integrity: when processing streams asynchronously, there is no guarantee of timeliness unless you consumers explicitly wait for a message to arrive before returning. Exactly-once/effectively-once preserve integrity through:
+
+* Representing the content of a write operation as a single message which can be written atomically.
+* Deriving all other state updates from that single message using deterministic functions.
+* Passing a client-generated request ID through all levels of processing, enabling duplicate supression and idempotence.
+* Making messages immutable.
+
+**Loosely interpreted constraints**
+
+Sometimes, it's OK to violate linearizability (but not integrity) in a business context and then follow up with an apology via a *compensating transaction*. E.g. overbooking a flight/hotel or selling more inventory than you have.
+
+**Coordination-avoiding data systems**
+
+*Coordination-avoiding* data systems give integrity (but not linearizablity) guarantees without requiring coordination and can achieve better performance and fault tolerance than systems that perform synchronous coordination.
+
+#### Trust, but Verify
+
+*System models* make assumptions about what faults can happen and what can never happen. In reality, faults are a question of probabilities: some things are more/less likely to occur.
+
+**Maintaining integrity in the face of software bugs**
+
+Bugs happen! In software! Even database software!
+
+**Don't just blindly trust what they promise**
+
+Checking data integrity is known as *auditing*.
+
+It's a good idea to check that your assumptions about faults are true, e.g. checking that data is on disk or that your backups are actually working.
+
+**A culture of verification**
+
+We should "trust, but verify". Hopefully in the future we'll have more *self-validating* and *self-auditing* systems.
+
+**Desinging for auditability**
+
+The invocation of the application logic that decided on some database mutations is transient and cannot be reproduced.
+
+By contrast, event-based systems can provide better auditability, via determinism we can re-run processors and diagnose problems.
+
+**The end-to-end argument again**
+
+It's important to have end-to-end integrity checks of your data which will give you increased confidence about the correctness of your systems.
+
+**Tools for auditable data systems**
+
+### Doing the Right Thing
