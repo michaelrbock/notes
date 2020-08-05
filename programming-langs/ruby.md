@@ -1,6 +1,6 @@
 # Ruby
 
-`!` at the end of a method means it modifies the variable.
+`!` at the end of a method means it has some side effect or might throw an exception.
 
 `?` means the method returns a boolean.
 
@@ -22,7 +22,7 @@ Methods are referenced by symbols.
 
 `include` is for adding instance methods, `extend` is for adding class methods.
 
-`require pry` then `binding.pry` to get a REPL in code.
+`require 'pry'` then `binding.pry` to get a REPL in code.
 
 
 ## Rails
@@ -49,10 +49,9 @@ https://stackoverflow.com/questions/15746362/after-create-foo-vs-after-commit-ba
 
 Forms automatically have validations. Model validations for objects underlying forms should really only apply to db-level stuff.
 
-Helpers are automatically included in Views, use `helpers.` to access in Controllers, and the namespace must match the directory structure: `Discord::ChannelHelper` must be in `app/helpers/discord/channel_helper.rb`.
+Helpers are automatically included in Views, use `helpers.` to access in Controllers, and the namespace must match the directory structure: e.g. `Discord::ChannelHelper` must be in `app/helpers/discord/channel_helper.rb`.
 
 `belongs_to` automatically `validates` `presence: true` unless you add `optional: true` to the `belongs_to` line.
-
 
 
 ### Haml
