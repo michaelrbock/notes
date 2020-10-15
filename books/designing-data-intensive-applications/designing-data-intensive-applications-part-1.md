@@ -4,7 +4,7 @@
 
 -
 
-## Chapter 1 - Reliable, Scalable, and Maitainable Data Systems
+## Chapter 1 - Reliable, Scalable, and Maintainable Data Systems
 
 #### *Reliability*: The system should work correctly, even in the case of hardware/software/human error.
 
@@ -193,6 +193,8 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 #### Hash Indexes
 
+Used by Bitcask (the default storage engine in Riak).
+
 * Simply store a hash map in memory of `{key : byte offset in data file}`, while appending to data file for each write/update.
 * Well-suited for workloads with not too many keys (can keep in memory), but where each key's value is updated frequently (ex: updating number of times a video has been played).
 * Can break log into segment files of a certain size and perform *compaction* on closed segments. Compaction means throwing away duplicate keys in log and keeping only the most recent update for each key.
@@ -203,8 +205,12 @@ A project to represent web sites in a machine-readable format in addition to hum
     * Deleting records requires a special deletion record (a *tombstone*): can discard previous values when merging.
     * Crash recovery requires re-creating in-memory hash map (can snapshot them to disk).
     * Partially-written records (mitigate with checksums in case of crash mid-way thru write).
-    * Only one thread for writes, multiple for reads.
+    * Only one thread for writes, multiple for readers.
 
+* Pros:
+    * Sequential writes are much faster than random writes, especially on spinning disk.
+    * Immutable logs make concurrency and crash recovery simple.
+    * Merging avoids data file fragmentation.
 * Limitations:
     * Hash table must fit in memory.
     * Range queries are not efficient.
@@ -212,18 +218,19 @@ A project to represent web sites in a machine-readable format in addition to hum
 #### SSTables and LSM Trees
 
 * *SortedStringTable* = segement files of key-value pairs *sorted* by key.
-    * Merging segments is efficient, similar to merge sort.
+    * Merging segments is efficient, similar to mergesort.
     * Only need to keep a (sparse) index to some keys to find any key in file, can scan between offsets for the rest (similar to binary search).
     * Can compress blocks before writing to disk and point index to start of block.
 * Constructing SSTables:
     * Writes go to an in-memory balanced tree (red-black or AVL), called a *memtable*.
     * When the memtable gets bigger than some threshold, write it to disk as an SSTable file (easy because the tree is sorted by key). While this is writing to disk, writes go to a new memtable.
-    * To serve a read request: first try to find in memtable, then in most-to-least recent segments.
+    * To serve a read request: first try to find the key in the memtable, then in most-to-least recent segments.
     * Run merging/compaction periodically in background.
     * Also write to a log file in case of crash to restore memtable.
 
 * [LevelDB](https://github.com/google/leveldb) (Google) and [RocksDB](https://rocksdb.org/) (Facebook) are key-value stores that use the algorithm above.
 * Cassandra and HBase are inspired by Google's BigTable, where *SSTable* and *memtable* were introduced.
+* The SSTable indexing structure was originally called *Log-Structured Merge-Tree* (or LSM-Tree).
 * Full text search is achieved by having a mapping of keys (search *terms*) to values (list of IDs of all documents containing that key/term: the *postings list*).
     * Lucene, an indexing engine for full-text search used by Elasticsearch and Solr uses this method for storing its *term dictionary*.
 
@@ -250,7 +257,7 @@ A project to represent web sites in a machine-readable format in addition to hum
 
 **Making B-Trees Reliable**
 
-* Writes happen via *overwritting*/*modifying* a page (not just appending like in LSM-trees).
+* Writes happen via *overwriting*/*modifying* a page (not just appending like in LSM-trees).
 * Some operations require overwrites to multiple pages.
     * This is dangerous because what if crash happens after only some pages have been written?
         * In order to be resilient to crashes, include a *write-ahead-log* (WAL or *redo log*). An append-only file where every modification must be written before it can be applied to the pages of the tree itself.
